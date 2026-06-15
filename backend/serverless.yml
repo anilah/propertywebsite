@@ -1,0 +1,114 @@
+service: propertyreach-api
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  architecture: x86_64
+  region: ${opt:region, env:AWS_REGION, 'ap-southeast-2'}
+  stage: ${opt:stage, 'prod'}
+  memorySize: 512
+  timeout: 29  # API Gateway hard limit is 30 s; keep one second of headroom
+  logRetentionInDays: 14
+
+  environment:
+    NODE_ENV: production
+    PORT: '3001'
+    # Aurora DSQL — IAM token signed at Lambda cold start (no static DB password).
+    # DATABASE_URL is left empty; lambda.ts calls applyDsqlIamDatabaseUrl() on init.
+    DATABASE_URL: ''
+    AURORA_DSQL_IAM_AUTH: 'true'
+    AURORA_DSQL_HOST: ${env:AURORA_DSQL_HOST}
+    AURORA_DSQL_REGION: ${env:AURORA_DSQL_REGION, 'ap-southeast-2'}
+    AURORA_DSQL_TOKEN_EXPIRES_SEC: ${env:AURORA_DSQL_TOKEN_EXPIRES_SEC, '900'}
+    # Auth
+    JWT_SECRET: ${env:JWT_SECRET}
+    JWT_EXPIRES_IN: ${env:JWT_EXPIRES_IN, '7d'}
+    CORS_ORIGIN: ${env:CORS_ORIGIN}
+    SERVER_PUBLIC_URL: ${env:SERVER_PUBLIC_URL}
+    # Super admin credentials (mobile + PIN always from env — never stored in DB)
+    SUPER_ADMIN_MOBILE: ${env:SUPER_ADMIN_MOBILE}
+    SUPER_ADMIN_OTP: ${env:SUPER_ADMIN_OTP}
+    # S3 file uploads
+    S3_BUCKET: ${env:S3_BUCKET, ''}
+    S3_REGION: ${env:S3_REGION, ''}
+    S3_ACCESS_KEY_ID: ${env:S3_ACCESS_KEY_ID, ''}
+    S3_SECRET_ACCESS_KEY: ${env:S3_SECRET_ACCESS_KEY, ''}
+    S3_PUBLIC_URL_PREFIX: ${env:S3_PUBLIC_URL_PREFIX, ''}
+    # Feature flags
+    PUBLIC_LISTINGS_API_ENABLED: 'true'
+    API_DOCS_ENABLED: 'false'
+    EXPOSE_ADMIN_API_INFO: 'false'
+    LOG_HTTP: 'false'
+
+  # ── Optional: uncomment if your RDS instance is inside a VPC ──────────────
+  # vpc:
+  #   securityGroupIds:
+  #     - ${env:VPC_SECURITY_GROUP_ID}
+  #   subnetIds:
+  #     - ${env:VPC_SUBNET_ID_1}
+  #     - ${env:VPC_SUBNET_ID_2}
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:DeleteObject
+          Resource:
+            - arn:aws:s3:::${env:S3_BUCKET, 'placeholder-bucket'}/*
+        # Aurora DSQL IAM auth — required when AURORA_DSQL_IAM_AUTH=true (Lambda uses this role, not ~/.aws).
+        # Replace with a single-cluster ARN if your org disallows wildcards: arn:aws:dsql:REGION:ACCOUNT:cluster/CLUSTER_ID
+        - Effect: Allow
+          Action:
+            - dsql:DbConnectAdmin
+          Resource:
+            - Fn::Sub: arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/*
+
+package:
+  individually: false
+  patterns:
+    # include compiled output and runtime deps
+    - dist/**
+    - node_modules/**
+    - prisma/schema.prisma
+    # include Prisma query engine binaries (generated during build)
+    - node_modules/.prisma/**
+    - node_modules/@prisma/client/**
+    # exclude dev-only and unnecessary files
+    - '!node_modules/.bin/**'
+    - '!node_modules/**/test/**'
+    - '!node_modules/**/tests/**'
+    - '!node_modules/**/*.d.ts'
+    - '!node_modules/**/*.md'
+    - '!node_modules/**/*.map'
+    - '!src/**'
+    - '!uploads/**'
+
+functions:
+  api:
+    handler: dist/lambda.handler
+    description: PropertyReach API (Express via @vendia/serverless-express)
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+      - httpApi:
+          path: /
+          method: ANY
+
+plugins:
+  - serverless-offline   # local Lambda emulation (optional, install separately)
+
+# ── Custom domain (optional, requires serverless-domain-manager plugin) ───────
+# custom:
+#   customDomain:
+#     domainName: api.propertyreach.co.nz
+#     certificateArn: arn:aws:acm:us-east-1:ACCOUNT:certificate/CERT_ID
+#     createRoute53Record: true
+#     endpointType: regional
+# ─────────────────────────────────────────────────────────────────────────────

@@ -1,0 +1,61 @@
+{
+  "name": "propertyreach-backend",
+  "version": "1.0.0",
+  "description": "PropertyReach Backend API",
+  "main": "dist/server.js",
+  "type": "module",
+  "scripts": {
+    "postinstall": "prisma generate",
+    "dev": "tsx watch src/server.ts",
+    "build": "prisma generate && tsc",
+    "start": "node dist/server.js",
+    "start:lambda": "node -e \"import('./dist/lambda.js').then(m=>console.log('Lambda handler exported:', !!m.handler))\"",
+    "migrate": "prisma migrate dev",
+    "generate": "prisma generate",
+    "db:push:dsql": "node scripts/prisma-dsql-push.mjs",
+    "db:indexes:dsql": "node scripts/create-dsql-indexes.mjs",
+    "db:drop:dsql": "node scripts/drop-dsql-tables.mjs",
+    "db:create:dsql": "node scripts/create-dsql-tables.mjs",
+    "db:seed": "node scripts/seed-demo.mjs",
+    "seed": "tsx prisma/seed.ts",
+    "studio": "prisma studio",
+    "package:lambda-zip": "bash scripts/package-lambda-zip.sh"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1025.0",
+    "@aws-sdk/dsql-signer": "^3.1026.0",
+    "@aws-sdk/s3-request-presigner": "^3.1025.0",
+    "@prisma/client": "^5.7.1",
+    "@types/multer": "^2.1.0",
+    "@vendia/serverless-express": "^4.12.6",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-validator": "^7.0.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.1.1",
+    "pg": "^8.11.3",
+    "swagger-ui-express": "^5.0.1",
+    "twilio": "^4.19.0",
+    "uuid": "^13.0.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/node": "^20.10.5",
+    "@types/pg": "^8.10.9",
+    "@types/swagger-ui-express": "^4.1.8",
+    "@types/uuid": "^10.0.0",
+    "prisma": "^5.7.1",
+    "tsx": "^4.7.0",
+    "typescript": "^5.9.3"
+  }
+}

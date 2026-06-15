@@ -1,0 +1,222 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  // For Lambda builds done on macOS/Windows, ensure Linux engines are available
+  // (If you build/package on Linux in CI, "native" is usually enough.)
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider     = "postgresql"
+  url          = env("DATABASE_URL")
+  // Aurora DSQL has no foreign keys; Prisma emulates relations and referential actions client-side.
+  relationMode = "prisma"
+}
+
+// Enums are stored as String for Aurora DSQL compatibility (DSQL does not support CREATE TYPE AS ENUM).
+// The allowed values are enforced in application code via src/types/enums.ts.
+
+model User {
+  id            String   @id @default(uuid())
+  mobileNumber  String   @unique
+  role          String   @default("PENDING")
+  pin           String?  // bcrypt-hashed login PIN; set by admin on create/reset, changeable by user
+  isActive      Boolean  @default(true)  // false = deactivated by super admin (agents only)
+  // Agent profile (collected at sign-up for real estate agents)
+  firstName     String?
+  lastName      String?
+  email         String?
+  agencyName    String?
+  licenseNumber String?
+  profilePhotoUrl String?
+  // Listing-facing branding (office + optional display overrides; single source vs per-listing form)
+  officeBranchName       String?
+  officePhone            String?
+  officeWebsite          String?
+  appraisalUrl           String?
+  platinumPartner        Boolean  @default(false)
+  listingAgentDisplayName String? // optional override; default is first + last name
+  listingAgentPhotoUrl    String? // optional override; default is profile photo
+  coListingAgentName      String?
+  coListingAgentPhotoUrl  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  listings        Listing[]
+  listingUpdates  ListingUpdate[]
+
+  @@map("users")
+}
+
+model Listing {
+  id              String        @id @default(uuid())
+  listingType     String
+  status          String        @default("DRAFT")
+  headline        String
+  description     String        @db.Text
+  propertyType    String
+
+  // Location (region/district/suburb align with search filters; street/city for full address line)
+  region          String
+  district        String
+  suburb          String
+  streetAddress   String?
+  city            String?
+  postalCode      String?
+  latitude        Float?
+  longitude       Float?
+
+  // Pricing
+  price           Float?
+  rentPerWeek     Float?
+  priceNegotiable Boolean       @default(false)
+
+  // Property details
+  bedrooms        Int
+  bathrooms       Int
+  halfBathrooms   Int           @default(0) // e.g. 2 full + 1 half → “2.5 bathrooms”
+  parking         Int
+  offStreetParking Int?         // count for “X Off-street parking” badges
+  ensuiteCount    Int           @default(0)
+  parkingDescription String?    @db.Text // e.g. “1 Car Off Street Parking”
+  floorArea       Float?
+  landArea        Float?
+
+  // Listing metadata (portal-style)
+  agencyReference      String?  // branch listing ref e.g. 917184
+  externalListingNumber String? // public-facing # e.g. Trade Me style
+  viewCount            Int      @default(0)
+
+  // Development / project style listings
+  totalUnits      Int?
+  soldUnits       Int?
+  remainingUnits  Int?
+  expectedCompletion String? @db.Text // e.g. “June 2026”
+
+  // Rich text / long-form extras (free text; can hold lists as paragraphs)
+  builderName       String?
+  schoolZone        String?
+  warrantyInfo      String?    @db.Text // e.g. Master Build guarantee
+  amenitiesNearby   String?    @db.Text
+  interiorHighlights String?   @db.Text
+  layoutOptions     String?    @db.Text // e.g. alternate floor plans copy
+  openHomesNote     String?    @db.Text // “No times scheduled” or intro copy
+
+  // Agency / office display (sidebar; can differ from agent User profile)
+  agencyDisplayName String?    @db.Text // e.g. “Barfoot & Thompson Mission Bay”
+  agencyLicense     String?    // e.g. “Licensed: REAA 2008”
+  officeBranchName  String?
+  officePhone       String?
+  officeWebsite     String?
+  appraisalUrl      String?
+  platinumPartner   Boolean    @default(false)
+
+  // Optional display overrides for listing card / detail (co-listing support)
+  listingAgentDisplayName String?
+  listingAgentPhotoUrl    String?
+  coListingAgentName      String?
+  coListingAgentPhotoUrl  String?
+
+  // Map / external links
+  streetViewUrl   String?
+  googleMapsUrl   String?
+
+  // Features (stored as JSON array)
+  features        String        @db.Text // JSON array as string
+
+  // Media URLs (legacy / fallback); prefer listingMedia relation when present
+  images          String        @db.Text // JSON array as string
+  videoUrl        String?                // S3 URL of the property walkthrough video
+
+  // Dates
+  listedDate      DateTime      @default(now())
+  updatedDate     DateTime      @updatedAt
+
+  // Relations
+  createdBy       String?
+  user            User?         @relation(fields: [createdBy], references: [id])
+
+  listingMedia    ListingMedia[]
+  listingUpdates  ListingUpdate[]
+  openHomes       ListingOpenHome[]
+  documents       ListingDocument[]
+  enquiries       Enquiry[]
+
+  // Admin notes
+  notes           String?       @db.Text
+
+  // Aurora DSQL requires CREATE INDEX ASYNC — indexes are managed via scripts/create-dsql-indexes.mjs
+  @@map("listings")
+}
+
+model ListingMedia {
+  id         String    @id @default(uuid())
+  listingId  String
+  listing    Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  url        String
+  kind       String    @default("PHOTO")
+  caption    String?
+  sortOrder  Int       @default(0)
+
+  @@map("listing_media")
+}
+
+model ListingUpdate {
+  id           String   @id @default(uuid())
+  listingId    String
+  listing      Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  authorUserId String?
+  author       User?    @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+  body         String   @db.Text
+  createdAt    DateTime @default(now())
+
+  @@map("listing_updates")
+}
+
+model ListingOpenHome {
+  id        String   @id @default(uuid())
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  startsAt  DateTime
+  endsAt    DateTime?
+  label     String?
+
+  @@map("listing_open_homes")
+}
+
+model ListingDocument {
+  id        String  @id @default(uuid())
+  listingId String
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  title     String
+  url       String?
+  sortOrder Int     @default(0)
+
+  @@map("listing_documents")
+}
+
+model Enquiry {
+  id        String   @id @default(uuid())
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  name      String
+  email     String
+  phone     String?
+  message   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@map("enquiries")
+}
+
+model OTP {
+  id          String   @id @default(uuid())
+  mobileNumber String
+  code        String
+  expiresAt   DateTime
+  verified    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  
+  @@map("otps")
+}
