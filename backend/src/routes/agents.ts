@@ -4,6 +4,7 @@ import {
   getAgents,
   createAgent,
   updateAgent,
+  deleteAgent,
   getAgentListings,
   approveAgent,
   activateAgent,
@@ -50,5 +51,6 @@ router.patch('/:id/deactivate', deactivateAgent);
 router.post('/:id/reset-pin', resetAgentPin);
 router.get('/:id/listings', getAgentListings);
 router.patch('/:id', updateAgent);
+router.delete('/:id', deleteAgent);
 
 export { router as agentsRouter };

@@ -1,201 +1,140 @@
-import { useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useParams, useLocation, Link } from "react-router-dom";
+import { contentApi, type ContentPost, type GuideBody, type RichBody } from "../services/api";
 
-interface Guide {
-  slug: string;
-  title: string;
-  intro: string;
-  image: string;
-  sections: { heading: string; body: string[] }[];
-}
-
-const guides: Guide[] = [
-  {
-    slug: "track-home-value",
-    title: "Track your home's value",
-    intro:
-      "Stay informed about your property's market value with regular HomesEstimate updates and local sales insights.",
-    image: "https://picsum.photos/seed/track-home/1200/600",
-    sections: [
-      {
-        heading: "What is a HomesEstimate?",
-        body: [
-          "A HomesEstimate is a computer-generated valuation that uses recent comparable sales, property attributes, and council data to estimate the current market value of a home.",
-          "It is updated regularly as new sales settle and as council records change. Treat it as a guide rather than a formal valuation.",
-        ],
-      },
-      {
-        heading: "How to track your home over time",
-        body: [
-          "Save your home to your PropertyReach watchlist to receive email updates each time the HomesEstimate refreshes.",
-          "Pair it with local sale alerts to see what neighbouring properties are achieving — the most reliable signal for where your own value is heading.",
-        ],
-      },
-      {
-        heading: "When you need a registered valuation",
-        body: [
-          "If you're refinancing, settling a relationship property matter, or applying for KiwiSaver first-home withdrawal, you'll need a registered valuation from a qualified valuer.",
-          "A HomesEstimate is not a substitute for that — but it's a useful starting point for understanding your equity position.",
-        ],
-      },
-    ],
-  },
-  {
-    slug: "local-area",
-    title: "Understand your local area",
-    intro:
-      "Find property estimates, sold prices, rateable values, and demographic insights for any New Zealand suburb.",
-    image: "https://picsum.photos/seed/local-area/1200/600",
-    sections: [
-      {
-        heading: "Recent sales matter most",
-        body: [
-          "Sold prices from the past 90 days are the single best indicator of current market conditions in a suburb. Asking prices are aspirational — sold prices are reality.",
-          "Use PropertyReach's suburb pages to filter recent sales by property type, bedrooms, and date range.",
-        ],
-      },
-      {
-        heading: "Schools, transport, and amenity",
-        body: [
-          "School zones, public transport access, supermarkets, and parks all influence property value. A small price gap between two seemingly similar suburbs often reflects these underlying differences.",
-          "Check zone maps on the Ministry of Education website before relying on the school zone for a property you're considering.",
-        ],
-      },
-      {
-        heading: "Council rates and rateable values",
-        body: [
-          "Each property has a rateable value (RV) used by your local council to calculate rates. RVs are typically updated every three years.",
-          "RVs lag behind market value, often by a significant margin. Don't use them as a guide to what a property is currently worth.",
-        ],
-      },
-    ],
-  },
-  {
-    slug: "buying",
-    title: "Guide to buying a house",
-    intro: "Tips for every part of your home buying journey, from finance to settlement.",
-    image: "https://picsum.photos/seed/buying-guide/1200/600",
-    sections: [
-      {
-        heading: "Get your finance sorted first",
-        body: [
-          "Pre-approval from a bank or mortgage adviser tells you exactly how much you can borrow and signals to sellers that you're a serious buyer.",
-          "Most pre-approvals are valid for 90 days. Lock in your approval before you start serious house hunting, not after.",
-        ],
-      },
-      {
-        heading: "Do your due diligence",
-        body: [
-          "Before signing an offer, review the LIM report, title, builder's report, and the property's permitted use under the local district plan.",
-          "Conditional offers give you time to do these checks; unconditional offers don't. Don't go unconditional without doing the work.",
-        ],
-      },
-      {
-        heading: "Auction vs negotiation",
-        body: [
-          "Auctions are unconditional — all your due diligence must be complete before auction day. Set your maximum bid in advance and don't go over it.",
-          "Negotiated sales let you include conditions like finance, builder's report, and LIM. They're typically slower but more flexible.",
-        ],
-      },
-    ],
-  },
-  {
-    slug: "selling",
-    title: "Selling tips and advice",
-    intro: "Get the most out of selling your biggest asset.",
-    image: "https://picsum.photos/seed/selling-tips/1200/600",
-    sections: [
-      {
-        heading: "Choose your agent carefully",
-        body: [
-          "Interview at least three agents before signing. Ask about their recent sales in your suburb, marketing strategy, and commission structure.",
-          "The cheapest agent isn't always the best value. Look at sale price vs initial appraisal across their recent listings.",
-        ],
-      },
-      {
-        heading: "Presentation pays",
-        body: [
-          "Decluttering, deep cleaning, fresh paint, and styled furniture can lift a property's perceived value by 5–10% — often far more than they cost.",
-          "Professional photography and a strong online listing are essential. Most buyers form their first impression before they ever walk through the door.",
-        ],
-      },
-      {
-        heading: "Picking the right sale method",
-        body: [
-          "Auction, deadline sale, tender, and price-by-negotiation each suit different property types and market conditions.",
-          "Talk to your agent about which method is achieving the best results for properties like yours in the current market.",
-        ],
-      },
-    ],
-  },
-];
-
-export function PropertyGuidesPage() {
-  const { hash } = useLocation();
+function GuidesListPage() {
+  const [guides, setGuides] = useState<ContentPost[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (hash) {
-      const el = document.getElementById(hash.slice(1));
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-    } else {
-      window.scrollTo({ top: 0 });
-    }
-  }, [hash]);
+    contentApi.listPosts({ type: 'guide', limit: 50 })
+      .then(r => setGuides(r.posts as ContentPost[]))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Page header */}
-      <div className="border-b border-gray-200 bg-white">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-primary-600 uppercase tracking-wide">
-            Property tools &amp; guides
-          </h1>
-          <p className="mt-2 text-gray-600">
-            Practical guides for tracking, buying, selling, and understanding New Zealand property.
-          </p>
+    <div className="min-h-screen bg-gray-50">
+      <div className="bg-white border-b border-gray-200 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Link to="/" className="text-sm text-primary-600 hover:underline font-medium mb-2 block">← Back to search</Link>
+          <h1 className="text-3xl font-bold text-gray-900">Property Guides</h1>
+          <p className="text-gray-500 mt-2">Expert advice for every part of your property journey.</p>
         </div>
       </div>
-
-      {/* Quick nav */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
-            {guides.map((g) => (
-              <a
-                key={g.slug}
-                href={`#${g.slug}`}
-                className="whitespace-nowrap px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300 transition-colors"
-              >
-                {g.title}
-              </a>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600" />
+          </div>
+        ) : guides.length === 0 ? (
+          <p className="text-center text-gray-500 py-20">No guides available yet.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {guides.map(guide => (
+              <Link key={guide.id} to={`/guides/${guide.slug}`}
+                className="group block bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow overflow-hidden border border-gray-100">
+                {guide.imageUrl && (
+                  <div className="aspect-[16/9] overflow-hidden bg-gray-200">
+                    <img src={guide.imageUrl} alt={guide.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  </div>
+                )}
+                <div className="p-5">
+                  {guide.category && (
+                    <span className="text-xs font-semibold text-primary-600 uppercase tracking-wide">{guide.category}</span>
+                  )}
+                  <h3 className="mt-1 text-base font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
+                    {guide.title}
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-500 line-clamp-3">{guide.excerpt}</p>
+                  <span className="mt-4 inline-flex items-center text-sm font-medium text-primary-600 group-hover:gap-2 transition-all gap-1">
+                    Read guide
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </span>
+                </div>
+              </Link>
             ))}
           </div>
-        </div>
-      </div>
-
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-14">
-        {guides.map((g) => (
-          <section key={g.slug} id={g.slug} className="scroll-mt-20">
-            <div className="aspect-[16/9] rounded-xl overflow-hidden bg-gray-100 mb-5">
-              <img src={g.image} alt={g.title} className="w-full h-full object-cover" />
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">{g.title}</h2>
-            <p className="mt-2 text-lg text-gray-600">{g.intro}</p>
-            <div className="mt-6 space-y-6">
-              {g.sections.map((s) => (
-                <div key={s.heading}>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{s.heading}</h3>
-                  <div className="space-y-3 text-gray-800 leading-relaxed">
-                    {s.body.map((p, i) => (
-                      <p key={i}>{p}</p>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        ))}
+        )}
       </div>
     </div>
   );
+}
+
+function GuideDetailPage({ slug }: { slug: string }) {
+  const [guide, setGuide] = useState<ContentPost | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    contentApi.getPost(slug)
+      .then(r => setGuide(r.post))
+      .catch(() => setNotFound(true))
+      .finally(() => setLoading(false));
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600" />
+      </div>
+    );
+  }
+
+  if (notFound || !guide) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <h1 className="text-2xl font-bold text-gray-900">Guide not found</h1>
+        <Link to="/guides" className="text-primary-600 hover:underline">← Back to guides</Link>
+      </div>
+    );
+  }
+
+  // Support rich HTML body or legacy sections array
+  const bodyHtml = (guide.body as RichBody)?.html
+    ?? (guide.body as GuideBody)?.sections?.map(s =>
+        `<h2>${s.heading}</h2>` + s.body.map(p => `<p>${p}</p>`).join('')
+      ).join('') ?? '';
+
+  return (
+    <div className="min-h-screen bg-white">
+      {guide.imageUrl && (
+        <div className="w-full aspect-[21/9] bg-gray-200 overflow-hidden">
+          <img src={guide.imageUrl} alt={guide.title} className="w-full h-full object-cover" />
+        </div>
+      )}
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
+        <Link to="/guides" className="text-sm text-primary-600 hover:underline font-medium">← Back to guides</Link>
+        {guide.category && (
+          <span className="mt-4 inline-block text-xs font-bold uppercase tracking-widest text-primary-600 bg-primary-50 rounded-full px-3 py-1">
+            {guide.category}
+          </span>
+        )}
+        <h1 className="mt-3 text-3xl sm:text-4xl font-bold text-gray-900 leading-tight">{guide.title}</h1>
+        <p className="mt-4 text-lg text-gray-700 leading-relaxed border-l-4 border-primary-400 pl-4">{guide.excerpt}</p>
+
+        <div
+          className="mt-10 prose prose-lg max-w-none text-gray-700 prose-headings:text-gray-900 prose-a:text-primary-600 prose-blockquote:border-primary-400"
+          dangerouslySetInnerHTML={{ __html: bodyHtml }}
+        />
+      </div>
+    </div>
+  );
+}
+
+export function PropertyGuidesPage() {
+  const { slug } = useParams<{ slug?: string }>();
+  const location = useLocation();
+
+  // Support both /guides (list) and /guides/:slug (detail)
+  if (slug) return <GuideDetailPage slug={slug} />;
+
+  // Legacy hash-based links from old guides page
+  const hash = location.hash.replace('#', '');
+  if (hash) return <GuideDetailPage slug={hash} />;
+
+  return <GuidesListPage />;
 }

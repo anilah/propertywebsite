@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
 import { PhotoPickerInput } from '../../components/ui/PhotoPickerInput';
+import { AdminPwaInstallCard } from '../../components/admin/AdminPwaInstallCard';
 
 
 export function AdminProfilePage() {
@@ -350,6 +351,10 @@ export function AdminProfilePage() {
               </p>
             </div>
           </div>
+        </div>
+
+        <div className="mt-6">
+          <AdminPwaInstallCard compact />
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">

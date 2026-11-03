@@ -5,8 +5,9 @@ import { listingDetailPath } from "../../utils/listingRoutes";
 import {
   formatSalePrice,
   formatRent,
-  formatAddress,
+  formatListingLocationLine,
 } from "../../utils/format";
+import { listingCoverImage } from "../../utils/listingImages";
 import { Pagination } from "../ui/Pagination";
 
 const MapView = lazy(() =>
@@ -68,7 +69,7 @@ function CompactCard({
 }: CompactCardProps) {
   const navigate = useNavigate();
   const placeholder = `https://picsum.photos/seed/${listing.id}/600/400`;
-  const image = listing.images?.[0] || placeholder;
+  const image = listingCoverImage(listing) || placeholder;
   const price =
     listing.listingType === "SALE" ? formatSalePrice(listing) : formatRent(listing);
 
@@ -112,7 +113,7 @@ function CompactCard({
             {listing.headline}
           </p>
           <p className="text-xs text-gray-500 mt-1 line-clamp-1">
-            {formatAddress(listing.location)}
+            {formatListingLocationLine(listing)}
           </p>
         </div>
         <div className="flex items-center justify-between mt-2">
@@ -180,18 +181,38 @@ export function MapResultsView({
   const unmapped = listings.length - mapped.length;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] gap-4 h-[calc(100vh-220px)] min-h-[600px]">
-      {/* Left: header / scrollable cards / pagination footer */}
-      <div className="flex flex-col min-h-0">
-        {/* Header */}
+    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] lg:gap-4 lg:h-[calc(100vh-220px)] lg:min-h-[600px]">
+      {/* Map first on mobile for map-mode UX */}
+      <div className="order-1 lg:order-2 h-64 sm:h-80 lg:h-full lg:sticky lg:top-4">
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center h-full min-h-[16rem] bg-gray-50 rounded-xl border border-gray-200">
+              <div className="text-center">
+                <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                <p className="text-sm text-gray-500">Loading map…</p>
+              </div>
+            </div>
+          }
+        >
+          <MapView
+            listings={mapped}
+            hoveredId={hoveredId}
+            selectedId={selectedId}
+            onMarkerClick={setSelectedId}
+            height="100%"
+          />
+        </Suspense>
+      </div>
+
+      {/* List */}
+      <div className="order-2 lg:order-1 flex flex-col min-h-0">
         <p className="text-xs text-gray-500 px-1 pb-2 flex-shrink-0">
           {listings.length} on this page
           {totalPages > 1 && ` · Page ${currentPage} of ${totalPages}`}
           {unmapped > 0 && ` · ${unmapped} without coordinates`}
         </p>
 
-        {/* Scrollable card list */}
-        <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto pr-1 -mr-1 space-y-3">
+        <div ref={listRef} className="flex-1 min-h-0 lg:overflow-y-auto pr-1 -mr-1 space-y-3">
           {listings.length === 0 ? (
             <div className="text-center py-20 text-gray-500 text-sm">No listings to show.</div>
           ) : (
@@ -209,7 +230,6 @@ export function MapResultsView({
           )}
         </div>
 
-        {/* Pagination footer */}
         {totalPages > 1 && (
           <div className="flex-shrink-0 pt-3 border-t border-gray-100 mt-2">
             <Pagination
@@ -219,28 +239,6 @@ export function MapResultsView({
             />
           </div>
         )}
-      </div>
-
-      {/* Right: sticky map */}
-      <div className="hidden lg:block sticky top-4 h-full">
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center h-full bg-gray-50 rounded-xl border border-gray-200">
-              <div className="text-center">
-                <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                <p className="text-sm text-gray-500">Loading map…</p>
-              </div>
-            </div>
-          }
-        >
-          <MapView
-            listings={mapped}
-            hoveredId={hoveredId}
-            selectedId={selectedId}
-            onMarkerClick={setSelectedId}
-            height="100%"
-          />
-        </Suspense>
       </div>
     </div>
   );

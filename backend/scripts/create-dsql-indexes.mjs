@@ -17,9 +17,9 @@ import pg from 'pg';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 config({ path: resolve(root, '.env') });
 const prodEnv = resolve(root, '.env.production');
-if (existsSync(prodEnv)) {
-  config({ path: prodEnv, override: true });
-}
+if (existsSync(prodEnv)) config({ path: prodEnv, override: true });
+const prodProdEnv = resolve(root, '.env.production.prod');
+if (existsSync(prodProdEnv)) config({ path: prodProdEnv, override: true });
 
 const host = process.env.AURORA_DSQL_HOST?.trim();
 const region =

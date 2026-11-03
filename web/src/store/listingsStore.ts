@@ -84,12 +84,12 @@ export const useListingsStore = create<ListingsStore>((set, get) => ({
         return listing.price !== undefined && listing.price <= filters.maxPrice!;
       });
     }
-    if (filters.listingType === 'RENT' && filters.minPrice !== undefined) {
+    if (filters.listingType !== 'SALE' && filters.minPrice !== undefined) {
       filtered = filtered.filter((listing) => {
         return listing.rentPerWeek !== undefined && listing.rentPerWeek >= filters.minPrice!;
       });
     }
-    if (filters.listingType === 'RENT' && filters.maxPrice !== undefined) {
+    if (filters.listingType !== 'SALE' && filters.maxPrice !== undefined) {
       filtered = filtered.filter((listing) => {
         return listing.rentPerWeek !== undefined && listing.rentPerWeek <= filters.maxPrice!;
       });

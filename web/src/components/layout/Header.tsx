@@ -3,6 +3,9 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useApiAuthStore } from "../../store/apiAuthStore";
 import { isPublicSiteEnabled } from "../../config/features";
 import { profileApi, type MyProfile } from "../../services/api";
+import { useSiteConfig } from "../../context/SiteConfigContext";
+import { MobileNavDrawer } from "./MobileNavDrawer";
+import { useReviewQueueCount } from "../../hooks/useReviewQueueCount";
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 // All icons are Heroicons-compatible outline style, strokeWidth 1.5 for a
@@ -44,6 +47,45 @@ function IconSignOut({ className = "h-4 w-4 shrink-0" }: { className?: string })
     <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round"
         d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+    </svg>
+  );
+}
+
+/** Inbox — represents leads inbox */
+function IconLeads({ className = "h-4 w-4 shrink-0" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H6.911a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661z" />
+    </svg>
+  );
+}
+
+/** Puzzle piece — represents platform integrations */
+function IconIntegrations({ className = "h-4 w-4 shrink-0" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M14.25 6.087c0-.355.186-.676.401-.959.221-.29.349-.634.349-1.003 0-1.036-1.007-1.875-2.25-1.875s-2.25.84-2.25 1.875c0 .369.128.713.349 1.003.215.283.401.604.401.959v0a.64.64 0 01-.657.643 48.39 48.39 0 01-4.163-.3c.186 1.613.293 3.25.315 4.907a.656.656 0 01-.658.663v0c-.355 0-.676-.186-.959-.401a1.647 1.647 0 00-1.003-.349c-1.036 0-1.875 1.007-1.875 2.25s.84 2.25 1.875 2.25c.369 0 .713-.128 1.003-.349.283-.215.604-.401.959-.401v0c.31 0 .555.26.532.57a48.039 48.039 0 01-.642 5.056c1.518.19 3.058.309 4.616.354a.64.64 0 00.657-.643v0c0-.355-.186-.676-.401-.959a1.647 1.647 0 01-.349-1.003c0-1.035 1.008-1.875 2.25-1.875 1.243 0 2.25.84 2.25 1.875 0 .369-.128.713-.349 1.003-.215.283-.4.604-.4.959v0c0 .333.277.599.61.58a48.1 48.1 0 005.427-.63 48.05 48.05 0 00.582-4.717.532.532 0 00-.533-.57v0c-.355 0-.676.186-.959.401-.29.221-.634.349-1.003.349-1.035 0-1.875-1.007-1.875-2.25s.84-2.25 1.875-2.25c.37 0 .713.128 1.003.349.283.215.604.401.96.401v0a.656.656 0 00.658-.663 48.422 48.422 0 00-.37-5.36c-1.886.342-3.81.574-5.766.689a.578.578 0 01-.61-.58v0z" />
+    </svg>
+  );
+}
+
+/** Megaphone — represents digital marketing campaigns */
+function IconCampaigns({ className = "h-4 w-4 shrink-0" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 001.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 010 3.46" />
+    </svg>
+  );
+}
+
+function IconTradies({ className = "h-4 w-4 shrink-0" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
     </svg>
   );
 }
@@ -118,7 +160,7 @@ function NavPill({
     <Link
       to={to}
       aria-current={active ? "page" : undefined}
-      className={`relative flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+      className={`relative flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors ${
         active
           ? "bg-slate-900 text-white shadow-sm"
           : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
@@ -149,8 +191,10 @@ export function Header() {
   const logout = useApiAuthStore((state) => state.logout);
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const publicSite = isPublicSiteEnabled();
+  const { config: siteConfig } = useSiteConfig();
 
   const [profile, setProfile] = useState<MyProfile | null>(null);
   useEffect(() => {
@@ -167,52 +211,118 @@ export function Header() {
     return () => document.removeEventListener("mousedown", close);
   }, [isMenuOpen]);
 
-  const isListingsSection = location.pathname.startsWith("/admin/listings");
-  const isAgentsSection   = location.pathname.startsWith("/admin/agents");
-  const isProfileSection  = location.pathname.startsWith("/admin/profile");
+  const isListingsSection     = location.pathname.startsWith("/admin/listings");
+  const isAgentsSection       = location.pathname.startsWith("/admin/agents");
+  const isCampaignsSection    = location.pathname.startsWith("/admin/campaigns");
+  const isLeadsSection        = location.pathname.startsWith("/admin/leads");
+  const isIntegrationsSection = location.pathname.startsWith("/admin/integrations");
+  const isBrandingSection     = location.pathname.startsWith("/admin/branding");
+  const isContentSection      = location.pathname.startsWith("/admin/content");
+  const isTradiesSection      = location.pathname.startsWith("/admin/tradies");
+  const isProfileSection      = location.pathname.startsWith("/admin/profile");
 
   const portalHome = isAuthenticated && (isSuperAdmin || isAgent) ? "/admin/listings" : "/admin/login";
   const homeHref   = publicSite ? "/" : portalHome;
 
   const displayName = [profile?.firstName, profile?.lastName].filter(Boolean).join(" ") || null;
+  const pendingReviewCount = useReviewQueueCount();
+
+  const adminNavItems = [
+    {
+      to: "/admin/listings",
+      label: isSuperAdmin ? "All listings" : "My listings",
+      active: isListingsSection,
+      icon: <IconListings />,
+      badge: isSuperAdmin ? pendingReviewCount : undefined,
+    },
+    ...(isSuperAdmin
+      ? [
+          { to: "/admin/agents", label: "Agents", active: isAgentsSection, icon: <IconAgents /> },
+          { to: "/admin/campaigns", label: "Campaigns", active: isCampaignsSection, icon: <IconCampaigns /> },
+          { to: "/admin/leads", label: "Leads", active: isLeadsSection, icon: <IconLeads /> },
+          { to: "/admin/integrations", label: "Integrations", active: isIntegrationsSection, icon: <IconIntegrations /> },
+          { to: "/admin/tradies", label: "Tradies", active: isTradiesSection, icon: <IconTradies /> },
+          {
+            to: "/admin/branding",
+            label: "Branding",
+            active: isBrandingSection,
+            icon: (
+              <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
+              </svg>
+            ),
+          },
+          {
+            to: "/admin/content",
+            label: "Content",
+            active: isContentSection,
+            icon: (
+              <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 01-2.25 2.25M16.5 7.5V18a2.25 2.25 0 002.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 002.25 2.25h13.5M6 7.5h3v3H6v-3z" />
+              </svg>
+            ),
+          },
+        ]
+      : []),
+    { to: "/admin/profile", label: "My profile", active: isProfileSection, icon: <IconProfile /> },
+  ];
 
   return (
-    <header className="sticky top-0 z-50 border-b border-gray-200 bg-white shadow-sm">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between gap-3 sm:h-[4.25rem]">
+    <header className="sticky top-0 z-50 border-b border-gray-200/80 bg-white/95 backdrop-blur-md pt-safe app-top-bar">
+      <div className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8">
+        <div
+          className="flex items-center justify-between gap-2 py-2 sm:py-3 lg:py-4"
+          style={{
+            minHeight: undefined,
+          }}
+        >
 
-          {/* ── Logo ── */}
-          <Link to={homeHref} className="flex shrink-0 items-center gap-2.5 group">
+          {/* ── Logo — compact on phones ── */}
+          <Link to={homeHref} className="flex shrink-0 items-center gap-2 group min-w-0">
             <div className="relative shrink-0">
-              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 opacity-90 transition-opacity group-hover:opacity-100" />
-              <div className="relative rounded-xl bg-gradient-to-br from-primary-600 to-primary-800 p-2 shadow-lg">
-                <svg className="h-5 w-5 text-white sm:h-6 sm:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
-                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                </svg>
+              {siteConfig.logoUrl ? (
+                <img
+                  src={siteConfig.logoUrl}
+                  alt={siteConfig.siteName}
+                  className="w-auto object-contain max-w-[160px] sm:max-w-[220px] lg:max-w-[280px] h-9 sm:h-11 lg:h-[var(--app-logo-h)]"
+                  style={{ ['--app-logo-h' as string]: `${Math.min(Math.max(siteConfig.logoSize ?? 48, 36), 64)}px` }}
+                />
+              ) : (
+                <>
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 opacity-90 transition-opacity group-hover:opacity-100" />
+                  <div className="relative rounded-xl bg-gradient-to-br from-primary-600 to-primary-800 p-1.5 sm:p-2 shadow-lg">
+                    <svg className="h-5 w-5 text-white sm:h-6 sm:w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
+                        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    </svg>
+                  </div>
+                </>
+              )}
+            </div>
+            {!siteConfig.logoUrl && (
+              <div className="hidden min-[360px]:block">
+                <p className="text-base sm:text-lg font-bold leading-tight bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent lg:text-xl">
+                  {siteConfig.siteName}
+                </p>
+                <p className="text-[10px] text-gray-400 hidden lg:block -mt-0.5">
+                  {publicSite ? siteConfig.tagline : "Property management platform"}
+                </p>
               </div>
-            </div>
-            <div className="hidden min-[360px]:block">
-              <p className="text-lg font-bold leading-tight bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent sm:text-xl">
-                PropertyReach
-              </p>
-              <p className="text-[10px] text-gray-400 hidden sm:block -mt-0.5">
-                {publicSite ? "New Zealand's Property Portal" : "Property management platform"}
-              </p>
-            </div>
+            )}
           </Link>
 
           {/* ── Nav + user controls ── */}
-          <nav className="flex items-center gap-2 min-w-0" aria-label="Main">
+          <nav className="flex items-center gap-1.5 sm:gap-2 min-w-0" aria-label="Main">
             {isAgent || isSuperAdmin ? (
               <>
-                {/* ── Nav links ── */}
-                <div className="flex items-center gap-1">
+                {/* Desktop nav pills — hidden on phones to avoid crush */}
+                <div className="hidden lg:flex items-center gap-0.5">
                   <NavPill
                     to="/admin/listings"
                     active={isListingsSection}
                     icon={<IconListings />}
                     label={isSuperAdmin ? "All listings" : "My listings"}
+                    badge={isSuperAdmin ? pendingReviewCount : undefined}
                   />
                   {isSuperAdmin && (
                     <NavPill
@@ -222,12 +332,59 @@ export function Header() {
                       label="Agents"
                     />
                   )}
+                  {isSuperAdmin && (
+                    <NavPill
+                      to="/admin/campaigns"
+                      active={isCampaignsSection}
+                      icon={<IconCampaigns />}
+                      label="Campaigns"
+                    />
+                  )}
+                  {isSuperAdmin && (
+                    <NavPill
+                      to="/admin/leads"
+                      active={isLeadsSection}
+                      icon={<IconLeads />}
+                      label="Leads"
+                    />
+                  )}
+                  {isSuperAdmin && (
+                    <NavPill
+                      to="/admin/integrations"
+                      active={isIntegrationsSection}
+                      icon={<IconIntegrations />}
+                      label="Integrations"
+                    />
+                  )}
+                  {isSuperAdmin && (
+                    <NavPill
+                      to="/admin/tradies"
+                      active={isTradiesSection}
+                      icon={<IconTradies />}
+                      label="Tradies"
+                    />
+                  )}
+                  {isSuperAdmin && (
+                    <NavPill
+                      to="/admin/branding"
+                      active={isBrandingSection}
+                      icon={<svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" /></svg>}
+                      label="Branding"
+                    />
+                  )}
+                  {isSuperAdmin && (
+                    <NavPill
+                      to="/admin/content"
+                      active={isContentSection}
+                      icon={<svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 01-2.25 2.25M16.5 7.5V18a2.25 2.25 0 002.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 002.25 2.25h13.5M6 7.5h3v3H6v-3z" /></svg>}
+                      label="Content"
+                    />
+                  )}
                 </div>
 
-                {/* ── Divider ── */}
                 <div className="hidden sm:block h-7 w-px bg-gray-200 shrink-0" />
 
-                {/* ── User button ── */}
+                {/* Account menu (desktop + tablet) */}
                 <div className="relative shrink-0" ref={menuRef}>
                   <button
                     type="button"
@@ -242,7 +399,6 @@ export function Header() {
                     aria-label="Account menu"
                   >
                     <UserAvatar profile={profile} isSuperAdmin={isSuperAdmin} size="sm" />
-                    {/* Name — only shown when a real name is available */}
                     {displayName && (
                       <span className="hidden sm:block max-w-[8rem] truncate leading-tight text-sm">
                         {displayName}
@@ -251,13 +407,11 @@ export function Header() {
                     <IconChevron open={isMenuOpen} />
                   </button>
 
-                  {/* ── Dropdown ── */}
                   {isMenuOpen && (
                     <div
                       className="absolute right-0 top-full mt-2 w-72 origin-top-right rounded-2xl border border-gray-200 bg-white py-1 shadow-2xl ring-1 ring-black/5 z-50"
                       role="menu"
                     >
-                      {/* Identity card */}
                       <div className={`px-4 py-3.5 mx-2 mt-1 mb-1 rounded-xl ${
                         isSuperAdmin
                           ? "bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100"
@@ -277,52 +431,27 @@ export function Header() {
                                 ? "bg-amber-100 text-amber-800"
                                 : "bg-primary-100 text-primary-800"
                             }`}>
-                              {isSuperAdmin ? (
-                                <>
-                                  <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                  </svg>
-                                  Super admin
-                                </>
-                              ) : "Agent"}
+                              {isSuperAdmin ? "Super admin" : "Agent"}
                             </span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Menu links */}
                       <div className="mt-1 px-1">
-                        <MenuLink
-                          to="/admin/profile"
-                          icon={<IconProfile />}
-                          active={isProfileSection}
-                          onClick={() => setIsMenuOpen(false)}
-                        >
-                          My profile
-                        </MenuLink>
-
-                        <MenuLink
-                          to="/admin/listings"
-                          icon={<IconListings />}
-                          active={isListingsSection}
-                          onClick={() => setIsMenuOpen(false)}
-                        >
-                          {isSuperAdmin ? "All listings" : "My listings"}
-                        </MenuLink>
-
-                        {isSuperAdmin && (
+                        {adminNavItems.map((item) => (
                           <MenuLink
-                            to="/admin/agents"
-                            icon={<IconAgents />}
-                            active={isAgentsSection}
+                            key={item.to}
+                            to={item.to}
+                            icon={item.icon}
+                            active={item.active}
+                            badge={'badge' in item ? item.badge : undefined}
                             onClick={() => setIsMenuOpen(false)}
                           >
-                            Agents
+                            {item.label}
                           </MenuLink>
-                        )}
+                        ))}
                       </div>
 
-                      {/* Sign out */}
                       <div className="mt-1 border-t border-gray-100 px-1 pt-1 pb-1">
                         <button
                           type="button"
@@ -342,6 +471,41 @@ export function Header() {
                     </div>
                   )}
                 </div>
+
+                {/* Mobile hamburger for admin */}
+                <button
+                  type="button"
+                  className="lg:hidden inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white p-2.5 text-gray-700 shadow-sm hover:bg-gray-50"
+                  aria-label="Open menu"
+                  aria-expanded={drawerOpen}
+                  onClick={() => setDrawerOpen(true)}
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                </button>
+
+                <MobileNavDrawer
+                  open={drawerOpen}
+                  onClose={() => setDrawerOpen(false)}
+                  title="Admin menu"
+                  items={adminNavItems}
+                  footer={
+                    <button
+                      type="button"
+                      onClick={() => {
+                        logout();
+                        setProfile(null);
+                        setDrawerOpen(false);
+                        navigate(publicSite ? "/" : "/admin/login");
+                      }}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-50 px-3 py-3 text-sm font-semibold text-red-600"
+                    >
+                      <IconSignOut />
+                      Sign out
+                    </button>
+                  }
+                />
               </>
             ) : isAuthenticated ? (
               <button
@@ -352,17 +516,30 @@ export function Header() {
                 Sign out
               </button>
             ) : (
-              <Link
-                to="/admin/login"
-                className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
-                aria-label="Sign in"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                <span className="hidden sm:inline">Sign in</span>
-              </Link>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {/* Public phones use bottom tabs — skip hamburger */}
+                <Link
+                  to="/agent-signup"
+                  className="hidden sm:flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors shadow-sm min-h-[40px]"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  </svg>
+                  <span>Register</span>
+                </Link>
+                <Link
+                  to="/admin/login"
+                  className="flex items-center gap-2 rounded-full sm:rounded-lg bg-gray-100 p-2.5 sm:px-3 sm:py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors min-h-[40px] min-w-[40px] justify-center"
+                  aria-label="Sign in"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  <span className="hidden sm:inline">Sign in</span>
+                </Link>
+              </div>
             )}
           </nav>
         </div>
@@ -377,12 +554,14 @@ function MenuLink({
   to,
   icon,
   active,
+  badge,
   onClick,
   children,
 }: {
   to: string;
   icon: React.ReactNode;
   active?: boolean;
+  badge?: number;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -398,7 +577,12 @@ function MenuLink({
       }`}
     >
       <span className="text-gray-400">{icon}</span>
-      {children}
+      <span className="flex-1">{children}</span>
+      {badge != null && badge > 0 && (
+        <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+          {badge > 99 ? "99+" : badge}
+        </span>
+      )}
     </Link>
   );
 }

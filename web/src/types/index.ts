@@ -1,4 +1,4 @@
-export type ListingType = 'SALE' | 'RENT';
+export type ListingType = 'SALE' | 'RENT' | 'FLATMATES';
 export type ListingStatus =
   | 'draft'
   | 'pending_approval'
@@ -9,7 +9,7 @@ export type ListingStatus =
 export type PropertyType = 'House' | 'Apartment' | 'Unit' | 'Townhouse' | 'Lifestyle' | 'Land' | 'Other';
 export type SortOption = 'featured' | 'price-asc' | 'price-desc' | 'latest';
 
-export type ListingMediaKind = 'PHOTO' | 'EXTERIOR' | 'INTERIOR' | 'FLOORPLAN' | 'AERIAL' | 'OTHER';
+export type ListingMediaKind = 'PHOTO' | 'EXTERIOR' | 'INTERIOR' | 'FLOORPLAN' | 'AERIAL' | 'OTHER' | 'VIDEO' | 'REEL';
 
 export interface Location {
   region: string;
@@ -68,6 +68,8 @@ export interface Listing {
   bedrooms: number;
   bathrooms: number;
   halfBathrooms?: number;
+  lounges?: number;
+  livingRooms?: number;
   parking: number;
   offStreetParking?: number;
   ensuiteCount?: number;
@@ -94,14 +96,22 @@ export interface Listing {
   interiorHighlights?: string;
   layoutOptions?: string;
   openHomesNote?: string;
+  /** Paste-ready ad/post copy for Meta campaigns */
+  marketingCopy?: string;
+  /** Deep link back to this property page (used in ads / posts) */
+  marketingLink?: string;
 
   // Agency / office / agents (resolved for API responses — edit on agent profile, not listing form)
   agencyDisplayName?: string;
+  agencyLogoUrl?: string;
+  agencyBrandColor?: string;
   agencyLicense?: string;
   officeBranchName?: string;
   officePhone?: string;
+  whatsappNumber?: string;
   officeWebsite?: string;
   appraisalUrl?: string;
+  featured?: boolean;
   platinumPartner?: boolean;
 
   listingAgentDisplayName?: string;
@@ -136,10 +146,13 @@ export interface Listing {
     lastName?: string | null;
     mobileNumber?: string;
     agencyName?: string | null;
+    agencyLogoUrl?: string | null;
+    agencyBrandColor?: string | null;
     licenseNumber?: string | null;
     profilePhotoUrl?: string | null;
     officeBranchName?: string | null;
     officePhone?: string | null;
+    whatsappNumber?: string | null;
     officeWebsite?: string | null;
     appraisalUrl?: string | null;
     platinumPartner?: boolean;

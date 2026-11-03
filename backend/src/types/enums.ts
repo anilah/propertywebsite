@@ -8,6 +8,7 @@
 export const ListingType = {
   SALE: 'SALE',
   RENT: 'RENT',
+  FLATMATES: 'FLATMATES',
 } as const;
 export type ListingType = (typeof ListingType)[keyof typeof ListingType];
 

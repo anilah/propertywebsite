@@ -11,7 +11,9 @@ import {
   type AgentListingRow,
   type PendingApprovalListing,
 } from '../../services/api';
-import { formatSalePrice, formatRent } from '../../utils/format';
+import { formatSalePrice, formatRent, formatListingLocationLine } from '../../utils/format';
+import { listingCoverImage } from '../../utils/listingImages';
+import { normalizeNzMobile, isValidNzMobile } from '../../utils/nzPhone';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
@@ -98,7 +100,7 @@ function ListingStatsCell({ stats }: { stats: AgentListingStats }) {
 }
 
 function formatListingPrice(row: AgentListingRow) {
-  if (row.listingType === 'RENT' && row.rentPerWeek != null) {
+  if ((row.listingType === 'RENT' || row.listingType === 'FLATMATES') && row.rentPerWeek != null) {
     return `$${Number(row.rentPerWeek).toLocaleString()}/wk`;
   }
   if (row.price != null) return `$${Number(row.price).toLocaleString()}`;
@@ -160,9 +162,12 @@ function AgentDetailPanel(props: {
   onSaved: (updated: AgentUser) => void;
   onActivate: (id: string) => Promise<void>;
   onDeactivate: (id: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
   actionId: string | null;
 }) {
-  const { agent, initialTab, onClose, onSaved, onActivate, onDeactivate, actionId } = props;
+  const { agent, initialTab, onClose, onSaved, onActivate, onDeactivate, onDelete, actionId } = props;
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [tab, setTab] = useState<PanelTab>(initialTab);
 
@@ -199,10 +204,13 @@ function AgentDetailPanel(props: {
   const [editLastName, setEditLastName] = useState(agent.lastName?.trim() ?? '');
   const [editEmail, setEditEmail] = useState(agent.email?.trim() ?? '');
   const [editAgency, setEditAgency] = useState(agent.agencyName?.trim() ?? '');
+  const [editAgencyLogoUrl, setEditAgencyLogoUrl] = useState(agent.agencyLogoUrl?.trim() ?? '');
+  const [editAgencyBrandColor, setEditAgencyBrandColor] = useState(agent.agencyBrandColor?.trim() ?? '');
   const [editLicense, setEditLicense] = useState(agent.licenseNumber?.trim() ?? '');
   const [editPhoto, setEditPhoto] = useState(agent.profilePhotoUrl?.trim() ?? '');
   const [editOfficeBranch, setEditOfficeBranch] = useState(agent.officeBranchName?.trim() ?? '');
   const [editOfficePhone, setEditOfficePhone] = useState(agent.officePhone?.trim() ?? '');
+  const [editWhatsapp, setEditWhatsapp] = useState(agent.whatsappNumber?.trim() ?? '');
   const [editOfficeWebsite, setEditOfficeWebsite] = useState(agent.officeWebsite?.trim() ?? '');
   const [editAppraisalUrl, setEditAppraisalUrl] = useState(agent.appraisalUrl?.trim() ?? '');
   const [editPlatinum, setEditPlatinum] = useState(!!agent.platinumPartner);
@@ -244,10 +252,13 @@ function AgentDetailPanel(props: {
     setEditLastName(agent.lastName?.trim() ?? '');
     setEditEmail(agent.email?.trim() ?? '');
     setEditAgency(agent.agencyName?.trim() ?? '');
+    setEditAgencyLogoUrl(agent.agencyLogoUrl?.trim() ?? '');
+    setEditAgencyBrandColor(agent.agencyBrandColor?.trim() ?? '');
     setEditLicense(agent.licenseNumber?.trim() ?? '');
     setEditPhoto(agent.profilePhotoUrl?.trim() ?? '');
     setEditOfficeBranch(agent.officeBranchName?.trim() ?? '');
     setEditOfficePhone(agent.officePhone?.trim() ?? '');
+    setEditWhatsapp(agent.whatsappNumber?.trim() ?? '');
     setEditOfficeWebsite(agent.officeWebsite?.trim() ?? '');
     setEditAppraisalUrl(agent.appraisalUrl?.trim() ?? '');
     setEditPlatinum(!!agent.platinumPartner);
@@ -272,20 +283,28 @@ function AgentDetailPanel(props: {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    const normalizedMobile = normalizeNzMobile(editMobile.trim());
+    if (!isValidNzMobile(normalizedMobile)) {
+      setSaveError('Please enter a valid NZ mobile (10–11 digits, e.g. 021 123 4567 or 021 021 88860).');
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     setSaved(false);
     try {
       const res = await agentsApi.updateAgent(agent.id, {
-        mobileNumber: editMobile.trim(),
+        mobileNumber: normalizedMobile,
         firstName: editFirstName.trim(),
         lastName: editLastName.trim(),
         email: editEmail.trim() || null,
         agencyName: editAgency.trim() || null,
+        agencyLogoUrl: editAgencyLogoUrl.trim() || null,
+        agencyBrandColor: editAgencyBrandColor.trim() || null,
         licenseNumber: editLicense.trim() || null,
         profilePhotoUrl: editPhoto.trim() || null,
         officeBranchName: editOfficeBranch.trim() || null,
         officePhone: editOfficePhone.trim() || null,
+        whatsappNumber: editWhatsapp.trim() || null,
         officeWebsite: editOfficeWebsite.trim() || null,
         appraisalUrl: editAppraisalUrl.trim() || null,
         platinumPartner: editPlatinum,
@@ -393,7 +412,55 @@ function AgentDetailPanel(props: {
               New listing
             </Link>
 
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              disabled={actionId === agent.id || deleting}
+              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-800/60 bg-red-900/20 text-red-400 text-xs font-medium hover:bg-red-900/40 transition-colors disabled:opacity-50"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Delete
+            </button>
           </div>
+
+          {/* ── Delete confirmation ── */}
+          {confirmDelete && (
+            <div className="mx-4 mt-3 bg-red-950/40 border border-red-700/50 rounded-xl p-4">
+              <p className="text-sm text-red-300 font-medium mb-1">Permanently delete this agent?</p>
+              <p className="text-xs text-red-400/80 mb-4">
+                This cannot be undone. The agent's listings will be unassigned but not deleted.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setDeleting(true);
+                    try {
+                      await onDelete(agent.id);
+                      onClose();
+                    } finally {
+                      setDeleting(false);
+                      setConfirmDelete(false);
+                    }
+                  }}
+                  disabled={deleting}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {deleting ? 'Deleting…' : 'Yes, delete'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={deleting}
+                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-medium py-2 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Tabs ── */}
@@ -453,6 +520,39 @@ function AgentDetailPanel(props: {
                     placeholder="Barfoot & Thompson Mission Bay"
                   />
                 </div>
+                <div className="col-span-2">
+                  <Input
+                    label="Agency Logo URL"
+                    value={editAgencyLogoUrl}
+                    onChange={(e) => setEditAgencyLogoUrl(e.target.value)}
+                    placeholder="https://cdn.example.com/agency-logo.png"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Brand Color</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={editAgencyBrandColor || '#152040'}
+                      onChange={(e) => setEditAgencyBrandColor(e.target.value)}
+                      className="h-9 w-14 cursor-pointer rounded border border-gray-300 p-0.5"
+                    />
+                    <input
+                      type="text"
+                      value={editAgencyBrandColor}
+                      onChange={(e) => setEditAgencyBrandColor(e.target.value)}
+                      placeholder="#152040"
+                      className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                    {editAgencyBrandColor && (
+                      <div
+                        className="h-9 w-9 rounded-lg border border-gray-200 flex-shrink-0"
+                        style={{ backgroundColor: editAgencyBrandColor }}
+                        title="Preview"
+                      />
+                    )}
+                  </div>
+                </div>
                 <Input
                   label="License"
                   value={editLicense}
@@ -494,6 +594,43 @@ function AgentDetailPanel(props: {
                       placeholder="Full name"
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* ── Contact & Links ── */}
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <p className="text-sm font-medium text-gray-700 mb-3">Contact &amp; Links <span className="text-gray-400 font-normal">(shown on listings)</span></p>
+                <div className="space-y-3">
+                  <Input
+                    label="Office Phone"
+                    type="tel"
+                    value={editOfficePhone}
+                    onChange={(e) => setEditOfficePhone(e.target.value)}
+                    placeholder="09 123 4567"
+                  />
+                  <div>
+                    <Input
+                      label="WhatsApp Number"
+                      type="tel"
+                      value={editWhatsapp}
+                      onChange={(e) => setEditWhatsapp(e.target.value)}
+                      placeholder="021 123 4567"
+                    />
+                    <p className="mt-1 text-xs text-gray-400">If set, a WhatsApp button will appear on the public listing page.</p>
+                  </div>
+                  <Input
+                    label="Office Branch Name"
+                    value={editOfficeBranch}
+                    onChange={(e) => setEditOfficeBranch(e.target.value)}
+                    placeholder="Mission Bay Branch"
+                  />
+                  <Input
+                    label="Office Website"
+                    type="url"
+                    value={editOfficeWebsite}
+                    onChange={(e) => setEditOfficeWebsite(e.target.value)}
+                    placeholder="https://barfoot.co.nz"
+                  />
                 </div>
               </div>
 
@@ -600,7 +737,7 @@ function AgentDetailPanel(props: {
                           <div className="min-w-0 flex-1">
                             <p className="font-medium text-gray-900 line-clamp-2 text-sm leading-snug">{row.headline}</p>
                             <p className="text-xs text-gray-500 mt-1">
-                              {row.location.suburb}, {row.location.district} · {formatListingPrice(row)}
+                              {formatListingLocationLine(row) || 'Address not set'} · {formatListingPrice(row)}
                             </p>
                             <div className="mt-2 flex items-center gap-2">
                               <Badge variant={statusBadgeVariant(row.status)} className="text-[10px]">
@@ -918,11 +1055,16 @@ export function AdminAgentsPage({ initialCreateOpen = false }: AdminAgentsPagePr
 
   const handleCreateAgent = async (e: React.FormEvent) => {
     e.preventDefault();
+    const normalizedMobile = normalizeNzMobile(createMobile.trim());
+    if (!isValidNzMobile(normalizedMobile)) {
+      setError('Please enter a valid NZ mobile (10–11 digits, e.g. 021 123 4567 or 021 021 88860).');
+      return;
+    }
     setCreating(true);
     setError(null);
     try {
       const res = await agentsApi.createAgent({
-        mobileNumber: createMobile.trim(),
+        mobileNumber: normalizedMobile,
         firstName: createFirstName.trim(),
         lastName: createLastName.trim(),
         email: createEmail.trim() || undefined,
@@ -980,57 +1122,61 @@ export function AdminAgentsPage({ initialCreateOpen = false }: AdminAgentsPagePr
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">Agent directory</h1>
-              <p className="mt-1 text-gray-600 text-sm max-w-2xl">
-                Search, sort, and review agents at scale. Open an agent to see every listing they created, with counts by
-                status. Add agents with the button on the right.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <Button
-                variant="outline"
-                size="md"
-                onClick={() => {
-                  void load();
-                  void loadPublicationQueue();
-                }}
-                disabled={loading || publicationQueueLoading}
-              >
-                {loading || publicationQueueLoading ? 'Refreshing…' : 'Refresh'}
-              </Button>
-              <Button variant="primary" size="md" onClick={() => setShowCreate(true)}>
-                Add agent
-              </Button>
-            </div>
-          </div>
+    <div className="min-h-screen bg-gradient-to-b from-slate-100/90 via-slate-50/40 to-white">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
 
-          <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <Card className="p-4 border-l-4 border-l-slate-600">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Agents</p>
-              <p className="text-2xl font-bold text-gray-900 tabular-nums">{meta.totalAgents}</p>
-            </Card>
-            <Card className="p-4 border-l-4 border-l-emerald-500">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Active</p>
-              <p className="text-2xl font-bold text-gray-900 tabular-nums">{meta.activeAgents}</p>
-            </Card>
-            <Card className="p-4 border-l-4 border-l-gray-400">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Inactive</p>
-              <p className="text-2xl font-bold text-gray-900 tabular-nums">{meta.inactiveAgents}</p>
-            </Card>
-            <Card className="p-4 border-l-4 border-l-primary-600">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">All listings</p>
-              <p className="text-2xl font-bold text-gray-900 tabular-nums">{meta.totalListings}</p>
-            </Card>
+        {/* ── Page header ── */}
+        <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary-600">
+              Platform management
+            </p>
+            <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+              Agent directory
+            </h1>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-500 sm:text-base">
+              Search, sort, and review agents at scale. Open an agent to see every listing they created, with counts by status.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => {
+                void load();
+                void loadPublicationQueue();
+              }}
+              disabled={loading || publicationQueueLoading}
+            >
+              {loading || publicationQueueLoading ? 'Refreshing…' : 'Refresh'}
+            </Button>
+            <Button variant="primary" size="md" onClick={() => setShowCreate(true)}>
+              Add agent
+            </Button>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* ── Stat cards ── */}
+        <div className="mb-8 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <Card className="p-4 border-l-4 border-l-slate-600">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Agents</p>
+            <p className="text-2xl font-bold text-gray-900 tabular-nums">{meta.totalAgents}</p>
+          </Card>
+          <Card className="p-4 border-l-4 border-l-emerald-500">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Active</p>
+            <p className="text-2xl font-bold text-gray-900 tabular-nums">{meta.activeAgents}</p>
+          </Card>
+          <Card className="p-4 border-l-4 border-l-gray-400">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Inactive</p>
+            <p className="text-2xl font-bold text-gray-900 tabular-nums">{meta.inactiveAgents}</p>
+          </Card>
+          <Card className="p-4 border-l-4 border-l-primary-600">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">All listings</p>
+            <p className="text-2xl font-bold text-gray-900 tabular-nums">{meta.totalListings}</p>
+          </Card>
+        </div>
+
+        <div>
         <section className="mb-10">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -1066,7 +1212,7 @@ export function AdminAgentsPage({ initialCreateOpen = false }: AdminAgentsPagePr
             <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {publicationQueue.map((listing) => {
                 const img =
-                  listing.images?.[0] || listing.media?.[0]?.url || 'https://via.placeholder.com/800x600';
+                  listingCoverImage(listing) || 'https://via.placeholder.com/800x600';
                 const badge = publicationQueueListingBadge(listing);
                 return (
                   <li key={listing.id}>
@@ -1160,19 +1306,56 @@ export function AdminAgentsPage({ initialCreateOpen = false }: AdminAgentsPagePr
 
         {pending.length > 0 && (
           <section className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Legacy pending accounts</h2>
-            <p className="text-sm text-gray-500 mb-3">Promote old PENDING users to agent if needed.</p>
-            <ul className="space-y-2">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-500 text-white text-xs font-bold">
+                  {pending.length}
+                </span>
+                <h2 className="text-lg font-semibold text-gray-900">Pending Agent Registrations</h2>
+              </div>
+              <span className="text-xs font-medium bg-amber-100 text-amber-800 rounded-full px-2.5 py-1">
+                Action required
+              </span>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              These agents signed up and are waiting for approval. Review their details and approve or reject.
+            </p>
+            <ul className="space-y-3">
               {pending.map((u) => (
                 <li key={u.id}>
-                  <Card className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-gray-900">{displayName(u)}</p>
-                      <p className="text-xs text-gray-500 font-mono">{u.mobileNumber}</p>
+                  <Card className="p-4 sm:p-5 border-l-4 border-l-amber-400 bg-amber-50/30">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-gray-900 text-base">{displayName(u)}</p>
+                          {u.agencyName && (
+                            <span className="text-xs bg-primary-100 text-primary-700 rounded-full px-2 py-0.5 font-medium">
+                              {u.agencyName}
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-600">
+                          <span className="font-mono">{u.mobileNumber}</span>
+                          {u.email && <span>{u.email}</span>}
+                          {u.licenseNumber && (
+                            <span>Licence: <span className="font-medium">{u.licenseNumber}</span></span>
+                          )}
+                          <span className="text-gray-400 text-xs">
+                            Registered {new Date(u.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => handleApprove(u.id)}
+                          disabled={actionId === u.id}
+                        >
+                          {actionId === u.id ? 'Approving…' : 'Approve'}
+                        </Button>
+                      </div>
                     </div>
-                    <Button variant="primary" size="sm" onClick={() => handleApprove(u.id)} disabled={actionId === u.id}>
-                      {actionId === u.id ? '…' : 'Onboard as agent'}
-                    </Button>
                   </Card>
                 </li>
               ))}
@@ -1361,9 +1544,16 @@ export function AdminAgentsPage({ initialCreateOpen = false }: AdminAgentsPagePr
             catch (e) { setError(getErrorMessage(e)); }
             finally { setActionId(null); }
           }}
+          onDelete={async (id) => {
+            setActionId(id);
+            try { await agentsApi.deleteAgent(id); await load(); }
+            catch (e) { setError(getErrorMessage(e)); }
+            finally { setActionId(null); }
+          }}
           actionId={actionId}
         />
       )}
+      </div>
     </div>
   );
 }

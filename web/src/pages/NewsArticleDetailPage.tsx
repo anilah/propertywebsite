@@ -1,102 +1,113 @@
-import { Link, useParams } from "react-router-dom";
-import { newsArticles, getArticleById } from "../data/newsArticles";
+import { useEffect, useState } from "react";
+import { useParams, Link } from "react-router-dom";
+import { contentApi, type ContentPost, type NewsBody, type RichBody } from "../services/api";
 
 export function NewsArticleDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const articleId = Number(id);
-  const article = getArticleById(articleId);
+  const { slug } = useParams<{ slug: string }>();
+  const [article, setArticle] = useState<ContentPost | null>(null);
+  const [related, setRelated] = useState<ContentPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
-  if (!article) {
+  useEffect(() => {
+    if (!slug) return;
+    setLoading(true);
+    contentApi.getPost(slug)
+      .then(r => {
+        setArticle(r.post);
+        // Fetch related articles from same category
+        if (r.post.category) {
+          contentApi.listPosts({ type: 'news', category: r.post.category, limit: 4 })
+            .then(rel => setRelated(rel.posts.filter(p => p.slug !== slug).slice(0, 3) as ContentPost[]))
+            .catch(() => {});
+        }
+      })
+      .catch(() => setNotFound(true))
+      .finally(() => setLoading(false));
+  }, [slug]);
+
+  if (loading) {
     return (
-      <div className="min-h-screen bg-white">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-3">Article not found</h1>
-          <p className="text-gray-600 mb-6">
-            The article you're looking for doesn't exist or has been moved.
-          </p>
-          <Link
-            to="/news"
-            className="inline-block px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold rounded transition-colors"
-          >
-            Back to news
-          </Link>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600" />
       </div>
     );
   }
 
-  const related = newsArticles
-    .filter((a) => a.id !== article.id && a.category === article.category)
-    .slice(0, 3);
+  if (notFound || !article) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <h1 className="text-2xl font-bold text-gray-900">Article not found</h1>
+        <Link to="/news" className="text-primary-600 hover:underline">← Back to news</Link>
+      </div>
+    );
+  }
+
+  // Support rich HTML body or legacy paragraph array
+  const bodyHtml = (article.body as RichBody)?.html
+    ?? (article.body as NewsBody)?.paragraphs?.map(p => `<p>${p}</p>`).join('') ?? '';
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Link
-          to="/news"
-          className="inline-flex items-center text-sm text-primary-600 hover:text-primary-700 mb-4"
-        >
-          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          All news
-        </Link>
+      {/* Hero image */}
+      {article.imageUrl && (
+        <div className="w-full aspect-[21/9] bg-gray-200 overflow-hidden">
+          <img src={article.imageUrl} alt={article.title} className="w-full h-full object-cover" />
+        </div>
+      )}
 
-        <article>
-          <span className="text-xs font-semibold text-primary-600 uppercase tracking-wide">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
+        <Link to="/news" className="text-sm text-primary-600 hover:underline font-medium">← Back to news</Link>
+
+        {article.category && (
+          <span className="mt-4 inline-block text-xs font-bold uppercase tracking-widest text-primary-600 bg-primary-50 rounded-full px-3 py-1">
             {article.category}
           </span>
-          <h1 className="mt-2 text-3xl sm:text-4xl font-bold text-gray-900 leading-tight">
-            {article.title}
-          </h1>
-          <p className="mt-3 text-base text-gray-500">
-            {article.date} &middot; {article.readTime}
-          </p>
+        )}
 
-          <div className="mt-6 aspect-[16/9] rounded-xl overflow-hidden bg-gray-100">
-            <img src={article.image} alt={article.title} className="w-full h-full object-cover" />
-          </div>
+        <h1 className="mt-3 text-3xl sm:text-4xl font-bold text-gray-900 leading-tight">{article.title}</h1>
 
-          <p className="mt-6 text-lg text-gray-700 leading-relaxed font-medium">
-            {article.description}
-          </p>
+        <div className="flex items-center gap-3 mt-3 text-sm text-gray-500">
+          <span>{new Date(article.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+          {article.readTime && <><span>·</span><span>{article.readTime}</span></>}
+        </div>
 
-          <div className="mt-6 space-y-4 text-gray-800 leading-relaxed">
-            {article.body.map((para, i) => (
-              <p key={i}>{para}</p>
-            ))}
-          </div>
-        </article>
+        <p className="mt-5 text-lg text-gray-700 font-medium leading-relaxed border-l-4 border-primary-400 pl-4">
+          {article.excerpt}
+        </p>
 
-        {related.length > 0 && (
-          <section className="mt-12 pt-8 border-t border-gray-200">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">More in {article.category}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-              {related.map((r) => (
-                <Link
-                  to={`/news/${r.id}`}
-                  key={r.id}
-                  className="group block bg-white rounded-xl border border-gray-200 hover:shadow-md transition-shadow overflow-hidden"
-                >
-                  <div className="aspect-[16/9] overflow-hidden bg-gray-100">
-                    <img
-                      src={r.image}
-                      alt={r.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  </div>
-                  <div className="p-3">
-                    <h3 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-primary-600 transition-colors">
+        <div
+          className="mt-8 prose prose-lg max-w-none text-gray-700 prose-headings:text-gray-900 prose-a:text-primary-600 prose-blockquote:border-primary-400"
+          dangerouslySetInnerHTML={{ __html: bodyHtml }}
+        />
+      </div>
+
+      {/* Related articles */}
+      {related.length > 0 && (
+        <div className="border-t border-gray-100 bg-gray-50 py-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">More in {article.category}</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              {related.map(r => (
+                <Link key={r.id} to={`/news/${r.slug}`}
+                  className="group block bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-gray-100">
+                  {r.imageUrl && (
+                    <div className="aspect-[16/9] overflow-hidden bg-gray-200">
+                      <img src={r.imageUrl} alt={r.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    </div>
+                  )}
+                  <div className="p-4">
+                    <h3 className="font-semibold text-gray-900 line-clamp-2 group-hover:text-primary-600 transition-colors text-sm">
                       {r.title}
                     </h3>
-                    <p className="mt-1 text-xs text-gray-400">{r.date}</p>
                   </div>
                 </Link>
               ))}
             </div>
-          </section>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

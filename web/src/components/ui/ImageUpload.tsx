@@ -17,6 +17,10 @@ interface ImageUploadProps {
   onAdd: (url: string) => void;
   onRemove: (index: number) => void;
   onReorder?: (newOrder: string[]) => void;
+  /** S3 / local upload folder (default listings). Use `tradies` for work galleries. */
+  folder?: 'listings' | 'tradies' | 'profiles' | 'uploads';
+  /** Override “Featured” chip label on the first image */
+  featuredLabel?: string;
 }
 
 interface UploadingFile {
@@ -30,7 +34,13 @@ interface UploadingFile {
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_BYTES = 10 * 1024 * 1024;
 
-export function ImageUpload({ images, onAdd, onRemove }: ImageUploadProps) {
+export function ImageUpload({
+  images,
+  onAdd,
+  onRemove,
+  folder = 'listings',
+  featuredLabel = 'Featured',
+}: ImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState<UploadingFile[]>([]);
@@ -68,8 +78,8 @@ export function ImageUpload({ images, onAdd, onRemove }: ImageUploadProps) {
     try {
       // Prefer S3; fall back to local server storage (dev mode)
       const publicUrl = uploadCfg.s3Enabled
-        ? await uploadApi.uploadFileWithProgress(file, 'listings', track)
-        : await uploadApi.localUpload(file, 'listings', track);
+        ? await uploadApi.uploadFileWithProgress(file, folder, track)
+        : await uploadApi.localUpload(file, folder, track);
       onAdd(publicUrl);
     } catch (err) {
       setUploading((prev) =>
@@ -80,7 +90,7 @@ export function ImageUpload({ images, onAdd, onRemove }: ImageUploadProps) {
       URL.revokeObjectURL(previewUrl);
     }
     setUploading((prev) => prev.filter((u) => u.id !== id));
-  }, [onAdd, uploadCfg]);
+  }, [onAdd, uploadCfg, folder]);
 
   const processFiles = useCallback((files: File[]) => {
     setGlobalError(null);
@@ -281,7 +291,7 @@ export function ImageUpload({ images, onAdd, onRemove }: ImageUploadProps) {
                 <img src={src} alt={`Photo ${index + 1}`} className="w-full h-full object-cover" />
                 {index === 0 && (
                   <div className="absolute top-2 left-2 bg-primary-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow">
-                    Featured
+                    {featuredLabel}
                   </div>
                 )}
                 <button

@@ -5,11 +5,12 @@ import { listingDetailPath } from "../../utils/listingRoutes";
 import {
   formatSalePrice,
   formatRent,
-  formatAddress,
+  formatListingLocationLine,
   isNewListing,
 } from "../../utils/format";
 import { Card } from "../ui/Card";
 import { Badge } from "../ui/Badge";
+import { listingCoverImage } from "../../utils/listingImages";
 
 function AgentCircle({ photoUrl, name, size }: { photoUrl?: string | null; name?: string | null; size: number }) {
   const [err, setErr] = useState(false);
@@ -48,7 +49,7 @@ export function ListingCard({ listing }: ListingCardProps) {
       {/* Image with overlay on hover */}
       <div className="relative aspect-[4/3] bg-gradient-to-br from-gray-200 to-gray-300 overflow-hidden">
         <img
-          src={listing.images[0] || "https://via.placeholder.com/800x600"}
+          src={listingCoverImage(listing) || "https://via.placeholder.com/800x600"}
           alt={listing.headline}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
@@ -146,7 +147,7 @@ export function ListingCard({ listing }: ListingCardProps) {
               d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
             />
           </svg>
-          {formatAddress(listing.location)}
+          {formatListingLocationLine(listing)}
         </div>
 
         {/* Stats with icons */}

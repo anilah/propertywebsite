@@ -1,10 +1,9 @@
 import 'leaflet/dist/leaflet.css';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import type { Listing } from '../../../types';
 import { formatFullAddress } from '../../../utils/format';
-import { BetaBadge } from './BetaBadge';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -13,11 +12,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-type Tab = 'Location' | 'Schools' | 'Commute';
-const TABS: Tab[] = ['Location', 'Schools', 'Commute'];
-
 export function MapWithTabs({ listing }: { listing: Listing }) {
-  const [tab, setTab] = useState<Tab>('Location');
   const fullAddress = formatFullAddress(listing);
   const hasCoords =
     listing.latitude != null &&
@@ -43,31 +38,6 @@ export function MapWithTabs({ listing }: { listing: Listing }) {
 
   return (
     <section className="bg-white rounded-2xl shadow-card p-4 sm:p-6">
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        {TABS.map((t) => {
-          const disabled = t !== 'Location';
-          const active = tab === t;
-          return (
-            <button
-              key={t}
-              type="button"
-              onClick={() => !disabled && setTab(t)}
-              disabled={disabled}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                active
-                  ? 'bg-gray-900 text-white border-gray-900'
-                  : disabled
-                    ? 'bg-white text-gray-400 border-gray-200 cursor-not-allowed'
-                    : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-              }`}
-            >
-              {t === 'Location' && '📍'} {t === 'Schools' && '🏫'} {t === 'Commute' && '🚗'} {t}
-              {disabled && <BetaBadge className="ml-1" />}
-            </button>
-          );
-        })}
-      </div>
-
       <div className="relative isolate z-0 w-full h-[420px] rounded-xl overflow-hidden border border-gray-200">
         <MapContainer
           center={center}

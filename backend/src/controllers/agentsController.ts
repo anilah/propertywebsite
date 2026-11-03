@@ -80,10 +80,13 @@ export const createAgent = async (req: AuthRequest, res: Response) => {
       lastName,
       email,
       agencyName,
+      agencyLogoUrl,
+      agencyBrandColor,
       licenseNumber,
       profilePhotoUrl,
       officeBranchName,
       officePhone,
+      whatsappNumber,
       officeWebsite,
       appraisalUrl,
       platinumPartner,
@@ -121,6 +124,8 @@ export const createAgent = async (req: AuthRequest, res: Response) => {
         lastName: ln,
         email: email != null && String(email).trim() ? String(email).trim() : null,
         agencyName: agencyName != null && String(agencyName).trim() ? String(agencyName).trim() : null,
+        agencyLogoUrl: agencyLogoUrl != null && String(agencyLogoUrl).trim() ? String(agencyLogoUrl).trim() : null,
+        agencyBrandColor: agencyBrandColor != null && String(agencyBrandColor).trim() ? String(agencyBrandColor).trim() : null,
         licenseNumber:
           licenseNumber != null && String(licenseNumber).trim()
             ? String(licenseNumber).trim()
@@ -135,6 +140,8 @@ export const createAgent = async (req: AuthRequest, res: Response) => {
             : null,
         officePhone:
           officePhone != null && String(officePhone).trim() ? String(officePhone).trim() : null,
+        whatsappNumber:
+          whatsappNumber != null && String(whatsappNumber).trim() ? String(whatsappNumber).trim() : null,
         officeWebsite:
           officeWebsite != null && String(officeWebsite).trim()
             ? String(officeWebsite).trim()
@@ -166,10 +173,13 @@ export const createAgent = async (req: AuthRequest, res: Response) => {
         lastName: true,
         email: true,
         agencyName: true,
+        agencyLogoUrl: true,
+        agencyBrandColor: true,
         licenseNumber: true,
         profilePhotoUrl: true,
         officeBranchName: true,
         officePhone: true,
+        whatsappNumber: true,
         officeWebsite: true,
         appraisalUrl: true,
         platinumPartner: true,
@@ -197,10 +207,13 @@ const agentListSelect = {
   lastName: true,
   email: true,
   agencyName: true,
+  agencyLogoUrl: true,
+  agencyBrandColor: true,
   licenseNumber: true,
   profilePhotoUrl: true,
   officeBranchName: true,
   officePhone: true,
+  whatsappNumber: true,
   officeWebsite: true,
   appraisalUrl: true,
   platinumPartner: true,
@@ -234,10 +247,13 @@ export const updateAgent = async (req: AuthRequest, res: Response) => {
       lastName?: string;
       email?: string | null;
       agencyName?: string | null;
+      agencyLogoUrl?: string | null;
+      agencyBrandColor?: string | null;
       licenseNumber?: string | null;
       profilePhotoUrl?: string | null;
       officeBranchName?: string | null;
       officePhone?: string | null;
+      whatsappNumber?: string | null;
       officeWebsite?: string | null;
       appraisalUrl?: string | null;
       platinumPartner?: boolean;
@@ -282,6 +298,14 @@ export const updateAgent = async (req: AuthRequest, res: Response) => {
       data.agencyName =
         body.agencyName != null && String(body.agencyName).trim() ? String(body.agencyName).trim() : null;
     }
+    if (body.agencyLogoUrl !== undefined) {
+      data.agencyLogoUrl =
+        body.agencyLogoUrl != null && String(body.agencyLogoUrl).trim() ? String(body.agencyLogoUrl).trim() : null;
+    }
+    if (body.agencyBrandColor !== undefined) {
+      data.agencyBrandColor =
+        body.agencyBrandColor != null && String(body.agencyBrandColor).trim() ? String(body.agencyBrandColor).trim() : null;
+    }
     if (body.licenseNumber !== undefined) {
       data.licenseNumber =
         body.licenseNumber != null && String(body.licenseNumber).trim()
@@ -303,6 +327,12 @@ export const updateAgent = async (req: AuthRequest, res: Response) => {
     if (body.officePhone !== undefined) {
       data.officePhone =
         body.officePhone != null && String(body.officePhone).trim() ? String(body.officePhone).trim() : null;
+    }
+    if (body.whatsappNumber !== undefined) {
+      data.whatsappNumber =
+        body.whatsappNumber != null && String(body.whatsappNumber).trim()
+          ? String(body.whatsappNumber).trim()
+          : null;
     }
     if (body.officeWebsite !== undefined) {
       data.officeWebsite =
@@ -357,6 +387,26 @@ export const updateAgent = async (req: AuthRequest, res: Response) => {
     });
 
     res.json({ success: true, user: updated });
+  } catch (error: unknown) {
+    sendServerError(res, error);
+  }
+};
+
+/** DELETE /api/admin/agents/:id — permanently delete an agent (super admin only) */
+export const deleteAgent = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (user.role !== 'AGENT') {
+      return res.status(400).json({ error: 'Cannot delete a non-agent user' });
+    }
+    // Unassign listings before deleting (set createdBy to null rather than cascade-deleting listings)
+    await prisma.listing.updateMany({ where: { createdBy: id }, data: { createdBy: null } });
+    await prisma.user.delete({ where: { id } });
+    res.json({ success: true });
   } catch (error: unknown) {
     sendServerError(res, error);
   }

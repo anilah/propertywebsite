@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useApiAuthStore } from '../../store/apiAuthStore';
 import { normalizeNzMobile } from '../../utils/nzPhone';
 import { Button } from '../../components/ui/Button';
@@ -22,12 +22,13 @@ export function AdminLoginPage() {
   const formatMobileNumber = (value: string) => {
     const digits = value.replace(/\D/g, '');
     const normalized = normalizeNzMobile(digits);
-    if (normalized.startsWith('0')) return normalized.slice(0, 10);
+    // Allow 10–11 domestic digits (standard + extended NZ mobiles)
+    if (normalized.startsWith('0')) return normalized.slice(0, 11);
     if (digits.startsWith('64')) {
-      const rest = digits.slice(2, 11);
+      const rest = digits.slice(2, 12);
       return rest.length ? `0${rest}` : digits.slice(0, 3);
     }
-    return digits.slice(0, 10);
+    return digits.slice(0, 11);
   };
 
   const handleLogin = async () => {
@@ -122,7 +123,13 @@ export function AdminLoginPage() {
             ) : 'Sign In'}
           </Button>
 
-          <div className="text-center">
+          <div className="text-center space-y-2">
+            <p className="text-sm text-gray-500">
+              New here?{' '}
+              <Link to="/agent-signup" className="text-primary-600 hover:text-primary-700 font-medium">
+                Register here
+              </Link>
+            </p>
             <button type="button" onClick={() => navigate('/')}
               className="text-sm text-gray-500 hover:text-gray-700 font-medium">
               ← Back to Property Search

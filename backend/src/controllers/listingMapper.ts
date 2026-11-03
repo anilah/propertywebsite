@@ -19,7 +19,7 @@ export type ListingDocumentInput = {
 
 function parseMediaKind(k?: string): MediaKind {
   const u = String(k || 'PHOTO').toUpperCase();
-  const allowed = ['PHOTO', 'EXTERIOR', 'INTERIOR', 'FLOORPLAN', 'AERIAL', 'OTHER'] as const;
+  const allowed = ['PHOTO', 'EXTERIOR', 'INTERIOR', 'FLOORPLAN', 'AERIAL', 'OTHER', 'VIDEO', 'REEL'] as const;
   return (allowed.includes(u as (typeof allowed)[number]) ? u : 'PHOTO') as MediaKind;
 }
 
@@ -57,6 +57,8 @@ type ListingRow = {
   bedrooms: number;
   bathrooms: number;
   halfBathrooms: number;
+  lounges: number;
+  livingRooms: number;
   parking: number;
   offStreetParking: number | null;
   ensuiteCount: number;
@@ -77,12 +79,15 @@ type ListingRow = {
   interiorHighlights: string | null;
   layoutOptions: string | null;
   openHomesNote: string | null;
+  marketingCopy: string | null;
+  marketingLink: string | null;
   agencyDisplayName: string | null;
   agencyLicense: string | null;
   officeBranchName: string | null;
   officePhone: string | null;
   officeWebsite: string | null;
   appraisalUrl: string | null;
+  featured?: boolean;
   platinumPartner: boolean;
   listingAgentDisplayName: string | null;
   listingAgentPhotoUrl: string | null;
@@ -113,10 +118,13 @@ type ListingRow = {
     lastName: string | null;
     mobileNumber: string;
     agencyName?: string | null;
+    agencyLogoUrl?: string | null;
+    agencyBrandColor?: string | null;
     licenseNumber?: string | null;
     profilePhotoUrl?: string | null;
     officeBranchName?: string | null;
     officePhone?: string | null;
+    whatsappNumber?: string | null;
     officeWebsite?: string | null;
     appraisalUrl?: string | null;
     platinumPartner?: boolean;
@@ -127,14 +135,31 @@ type ListingRow = {
   } | null;
 };
 
+const VIDEO_MEDIA_KINDS = new Set(['VIDEO', 'REEL']);
+
+/** True when a URL looks like a video file (used as a belt-and-suspenders filter). */
+function looksLikeVideoUrl(url: string): boolean {
+  const path = url.split('?')[0].toLowerCase();
+  return /\.(mp4|webm|mov|m4v|avi|mkv)$/.test(path);
+}
+
+/**
+ * Photo URLs for cards/galleries. Excludes VIDEO/REEL marketing assets — those are
+ * managed via /marketing and must not become the cover image (browsers can't render
+ * .mp4 in an <img>, which showed as a broken image on admin/public cards).
+ */
 export function deriveImageUrls(listing: ListingRow): string[] {
   if (listing.listingMedia && listing.listingMedia.length > 0) {
     return [...listing.listingMedia]
+      .filter((m) => !VIDEO_MEDIA_KINDS.has(String(m.kind || '').toUpperCase()))
+      .filter((m) => !looksLikeVideoUrl(m.url))
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((m) => m.url);
   }
   try {
-    return JSON.parse(listing.images || '[]');
+    const parsed = JSON.parse(listing.images || '[]') as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((u): u is string => typeof u === 'string' && !looksLikeVideoUrl(u));
   } catch {
     return [];
   }
@@ -167,6 +192,8 @@ export function toApiListing(listing: ListingRow) {
     u?.listingAgentPhotoUrl?.trim() ||
     u?.profilePhotoUrl?.trim() ||
     undefined;
+  const agencyLogoUrl    = u?.agencyLogoUrl?.trim()    || undefined;
+  const agencyBrandColor = u?.agencyBrandColor?.trim() || undefined;
   const agencyDisplayName = u?.agencyName?.trim() || listing.agencyDisplayName || undefined;
   const agencyLicense = u?.licenseNumber?.trim() || listing.agencyLicense || undefined;
   const officeBranchName = u?.officeBranchName?.trim() || listing.officeBranchName || undefined;
@@ -209,6 +236,8 @@ export function toApiListing(listing: ListingRow) {
     bedrooms: listing.bedrooms,
     bathrooms: listing.bathrooms,
     halfBathrooms: listing.halfBathrooms,
+    lounges: listing.lounges ?? 0,
+    livingRooms: listing.livingRooms ?? 0,
     parking: listing.parking,
     offStreetParking: listing.offStreetParking ?? undefined,
     ensuiteCount: listing.ensuiteCount,
@@ -229,12 +258,17 @@ export function toApiListing(listing: ListingRow) {
     interiorHighlights: listing.interiorHighlights ?? undefined,
     layoutOptions: listing.layoutOptions ?? undefined,
     openHomesNote: listing.openHomesNote ?? undefined,
+    marketingCopy: listing.marketingCopy ?? undefined,
+    marketingLink: listing.marketingLink ?? undefined,
     agencyDisplayName,
+    agencyLogoUrl,
+    agencyBrandColor,
     agencyLicense,
     officeBranchName,
     officePhone,
     officeWebsite,
     appraisalUrl,
+    featured: listing.featured ?? false,
     platinumPartner,
     listingAgentDisplayName: agentDisplayName,
     listingAgentPhotoUrl: agentPhotoUrl,
@@ -264,10 +298,13 @@ export function toApiListing(listing: ListingRow) {
             lastName: listing.user.lastName,
             mobileNumber: listing.user.mobileNumber,
             agencyName: listing.user.agencyName ?? undefined,
+            agencyLogoUrl: listing.user.agencyLogoUrl ?? undefined,
+            agencyBrandColor: listing.user.agencyBrandColor ?? undefined,
             licenseNumber: listing.user.licenseNumber ?? undefined,
             profilePhotoUrl: listing.user.profilePhotoUrl ?? undefined,
             officeBranchName: listing.user.officeBranchName ?? undefined,
             officePhone: listing.user.officePhone ?? undefined,
+            whatsappNumber: listing.user.whatsappNumber ?? undefined,
             officeWebsite: listing.user.officeWebsite ?? undefined,
             appraisalUrl: listing.user.appraisalUrl ?? undefined,
             platinumPartner: listing.user.platinumPartner ?? false,

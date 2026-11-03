@@ -4,8 +4,9 @@ import { listingDetailPath } from "../../utils/listingRoutes";
 import {
   formatSalePrice,
   formatRent,
-  formatAddress,
+  formatListingLocationLine,
 } from "../../utils/format";
+import { listingCoverImage } from "../../utils/listingImages";
 
 interface PromotedListingCardProps {
   listing: Listing;
@@ -46,8 +47,7 @@ export function PromotedListingCard({ listing }: PromotedListingCardProps) {
   const navigate = useNavigate();
 
   const placeholder = `https://picsum.photos/seed/${listing.id}/1600/900`;
-  const heroImage =
-    (Array.isArray(listing.images) && listing.images[0]) || placeholder;
+  const heroImage = listingCoverImage(listing) || placeholder;
 
   const handleClick = () => {
     navigate(listingDetailPath(listing.listingType, listing.id, listing.location));
@@ -69,7 +69,7 @@ export function PromotedListingCard({ listing }: PromotedListingCardProps) {
       className="bg-white rounded-lg border-2 border-orange-400 shadow-lg hover:shadow-xl transition-shadow cursor-pointer overflow-hidden ring-2 ring-orange-100"
     >
       {/* ── Single hero image — matches regular card height ── */}
-      <div className="relative h-60 sm:h-72 lg:h-80 overflow-hidden">
+      <div className="relative h-[276px] sm:h-[332px] lg:h-[368px] overflow-hidden">
         <img
           src={heroImage}
           alt={listing.headline}
@@ -140,7 +140,7 @@ export function PromotedListingCard({ listing }: PromotedListingCardProps) {
               {listing.headline}
             </h3>
             <p className="text-sm text-gray-500">
-              {formatAddress(listing.location)}
+              {formatListingLocationLine(listing)}
             </p>
           </div>
 

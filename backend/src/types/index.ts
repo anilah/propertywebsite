@@ -1,4 +1,4 @@
-export type ListingType = 'SALE' | 'RENT';
+export type ListingType = 'SALE' | 'RENT' | 'FLATMATES';
 export type ListingStatus = 'DRAFT' | 'PUBLISHED';
 export type PropertyType = 'House' | 'Apartment' | 'Unit' | 'Townhouse' | 'Lifestyle' | 'Land' | 'Other';
 export type SortOption = 'featured' | 'price-asc' | 'price-desc' | 'latest';

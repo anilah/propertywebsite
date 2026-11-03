@@ -9,6 +9,7 @@ import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Button } from '../../components/ui/Button';
 import { FormSection } from '../../components/admin/FormSection';
+import { RichTextEditor } from '../../components/ui/RichTextEditor';
 import {
   ListingFormExtras,
   type MediaRow,
@@ -16,12 +17,29 @@ import {
   type OpenHomeRow,
   type DocumentRow,
 } from '../../components/admin/ListingFormExtras';
+import { openListingPublicPage } from '../../utils/listingRoutes';
+
+/** Convert an API ISO timestamp to a value for <input type="datetime-local"> in local time. */
+function toDatetimeLocalValue(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 // ── Button icons ─────────────────────────────────────────────────────────────
 function IcoX({ cls = 'h-3.5 w-3.5 shrink-0' }: { cls?: string }) {
   return (
     <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+}
+function IcoEye({ cls = 'h-3.5 w-3.5 shrink-0' }: { cls?: string }) {
+  return (
+    <svg className={cls} fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
     </svg>
   );
 }
@@ -80,34 +98,13 @@ function IcoSpin({ cls = 'h-3.5 w-3.5 shrink-0' }: { cls?: string }) {
 
 const propertyTypes: PropertyType[] = ['House', 'Apartment', 'Unit', 'Townhouse', 'Lifestyle', 'Land', 'Other'];
 
-const featuresOptions = [
-  'Modern Kitchen',
-  'Open Plan Living',
-  'Private Garden',
-  'Double Garage',
-  'Insulated',
-  'Harbour Views',
-  'Sea Views',
-  'Swimming Pool',
-  'Multiple Living Areas',
-  'Close to Schools',
-  'Secure Building',
-  'Gym Access',
-  'Concierge',
-  'Period Features',
-  'Recently Renovated',
-  'Brand New',
-  'Investment Opportunity',
-  'Low Maintenance',
-];
-
 const FORM_NAV = [
   { id: 'form-basics', label: 'Basics' },
   { id: 'form-location', label: 'Location' },
   { id: 'form-price', label: 'Price' },
   { id: 'form-specs', label: 'Specs' },
-  { id: 'form-features', label: 'Features' },
   { id: 'form-extras', label: 'Photos & extras' },
+  { id: 'form-marketing', label: 'Marketing' },
 ] as const;
 
 const FORM_NAV_IDS: Set<string> = new Set(FORM_NAV.map((n) => n.id));
@@ -122,8 +119,6 @@ function getScrollOffsetPx(toolbarEl: HTMLElement | null): number {
   return h + t + SCROLL_GAP_PX;
 }
 
-const textareaClass =
-  'w-full min-h-[140px] resize-y rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25';
 
 function StatInput({
   icon,
@@ -423,19 +418,22 @@ export function AdminListingFormPage() {
         if (isSuperAdmin) {
           setListingOwnerId(listing.createdBy || myUserId || '');
         }
+        const CAMPAIGN_KINDS = ['VIDEO', 'REEL', 'FLYER', 'CAROUSEL'];
         setMediaItems(
           listing.media?.length
-            ? listing.media.map((m) => ({
-                url: m.url,
-                kind: (m.kind || 'PHOTO') as MediaRow['kind'],
-              }))
+            ? listing.media
+                .filter((m) => !CAMPAIGN_KINDS.includes(m.kind || ''))
+                .map((m) => ({
+                  url: m.url,
+                  kind: (m.kind || 'PHOTO') as MediaRow['kind'],
+                }))
             : (listing.images || []).map((url) => ({ url, kind: 'PHOTO' as const }))
         );
         setUpdateItems(listing.updates?.map((u) => ({ body: u.body })) || []);
         setOpenHomeItems(
           listing.openHomes?.map((o) => ({
-            startsAt: o.startsAt ? o.startsAt.slice(0, 16) : '',
-            endsAt: o.endsAt ? o.endsAt.slice(0, 16) : '',
+            startsAt: o.startsAt ? toDatetimeLocalValue(o.startsAt) : '',
+            endsAt: o.endsAt ? toDatetimeLocalValue(o.endsAt) : '',
             label: o.label || '',
           })) || []
         );
@@ -499,18 +497,22 @@ export function AdminListingFormPage() {
     setListingOwnerId(newOwnerId);
   };
 
-  const toggleFeature = (feature: string) => {
-    setFormData((prev) => {
-      const currentFeatures = prev.features || [];
-      const newFeatures = currentFeatures.includes(feature)
-        ? currentFeatures.filter((f) => f !== feature)
-        : [...currentFeatures, feature];
-      return { ...prev, features: newFeatures };
-    });
-  };
-
   const isOffMarketStatus = (s: string | undefined) =>
     s === 'sold' || s === 'rented' || s === 'withdrawn';
+
+  const openPublicPreview = () => {
+    if (!id || !formData.listingType) return;
+    const loc = formData.location ?? { region: '', district: '', suburb: '' };
+    openListingPublicPage({
+      id,
+      listingType: formData.listingType,
+      location: {
+        region: loc.region || '',
+        district: loc.district || '',
+        suburb: loc.suburb || '',
+      },
+    });
+  };
 
   const resolvePayloadStatus = (intent: 'draft' | 'published', lifecycleOverride?: 'sold' | 'rented' | 'withdrawn'): ListingStatus => {
     if (lifecycleOverride) return lifecycleOverride;
@@ -549,48 +551,54 @@ export function AdminListingFormPage() {
       region: loc.region,
       district: loc.district,
       suburb: loc.suburb,
-      streetAddress: formData.streetAddress?.trim() || undefined,
-      city: formData.city?.trim() || undefined,
-      postalCode: formData.postalCode?.trim() || undefined,
-      latitude: formData.latitude,
-      longitude: formData.longitude,
-      streetViewUrl: formData.streetViewUrl?.trim() || undefined,
-      googleMapsUrl: formData.googleMapsUrl?.trim() || undefined,
+      // Empty optional values must be null (not omitted) so updates can clear them in the DB
+      streetAddress: formData.streetAddress?.trim() || null,
+      city: formData.city?.trim() || null,
+      postalCode: formData.postalCode?.trim() || null,
+      latitude: formData.latitude ?? null,
+      longitude: formData.longitude ?? null,
+      streetViewUrl: formData.streetViewUrl?.trim() || null,
+      googleMapsUrl: formData.googleMapsUrl?.trim() || null,
       propertyType: formData.propertyType!,
-      price: formData.price,
-      rentPerWeek: formData.rentPerWeek,
+      price: formData.price ?? null,
+      rentPerWeek: formData.rentPerWeek ?? null,
       priceNegotiable: formData.priceNegotiable || false,
       bedrooms: formData.bedrooms ?? 0,
       bathrooms: formData.bathrooms ?? 0,
       halfBathrooms: formData.halfBathrooms ?? 0,
+      lounges: formData.lounges ?? 0,
+      livingRooms: formData.livingRooms ?? 0,
       parking: formData.parking ?? 0,
-      offStreetParking: formData.offStreetParking,
+      offStreetParking: formData.offStreetParking ?? null,
       ensuiteCount: formData.ensuiteCount ?? 0,
-      parkingDescription: formData.parkingDescription?.trim() || undefined,
-      floorArea: formData.floorArea,
-      landArea: formData.landArea,
-      agencyReference: formData.agencyReference?.trim() || undefined,
-      externalListingNumber: formData.externalListingNumber?.trim() || undefined,
-      totalUnits: formData.totalUnits,
-      soldUnits: formData.soldUnits,
-      remainingUnits: formData.remainingUnits,
-      expectedCompletion: formData.expectedCompletion?.trim() || undefined,
-      builderName: formData.builderName?.trim() || undefined,
-      schoolZone: formData.schoolZone?.trim() || undefined,
-      warrantyInfo: formData.warrantyInfo?.trim() || undefined,
-      amenitiesNearby: formData.amenitiesNearby?.trim() || undefined,
-      interiorHighlights: formData.interiorHighlights?.trim() || undefined,
-      layoutOptions: formData.layoutOptions?.trim() || undefined,
-      openHomesNote: formData.openHomesNote?.trim() || undefined,
-      features: formData.features || [],
+      parkingDescription: formData.parkingDescription?.trim() || null,
+      floorArea: formData.floorArea ?? null,
+      landArea: formData.landArea ?? null,
+      agencyReference: formData.agencyReference?.trim() || null,
+      externalListingNumber: formData.externalListingNumber?.trim() || null,
+      totalUnits: null,
+      soldUnits: null,
+      remainingUnits: null,
+      expectedCompletion: formData.expectedCompletion?.trim() || null,
+      builderName: formData.builderName?.trim() || null,
+      schoolZone: formData.schoolZone?.trim() || null,
+      warrantyInfo: formData.warrantyInfo?.trim() || null,
+      amenitiesNearby: formData.amenitiesNearby?.trim() || null,
+      interiorHighlights: formData.interiorHighlights?.trim() || null,
+      layoutOptions: formData.layoutOptions?.trim() || null,
+      openHomesNote: formData.openHomesNote?.trim() || null,
+      marketingCopy: formData.marketingCopy?.trim() || null,
+      marketingLink: formData.marketingLink?.trim() || null,
+      features: [],
       images: imageUrls,
       media: mediaPayload,
       updates: updateItems.filter((u) => u.body.trim()).map((u) => ({ body: u.body.trim() })),
       openHomes: openHomesPayload,
       documents: documentItems
         .filter((d) => d.title.trim())
-        .map((d) => ({ title: d.title.trim(), url: d.url.trim() || undefined })),
-      notes: formData.notes,
+        .map((d) => ({ title: d.title.trim(), url: d.url.trim() || null })),
+      notes: typeof formData.notes === 'string' ? formData.notes.trim() || null : null,
+      featured: formData.featured || false,
       ...(isSuperAdmin && selectedOwnerId ? { createdBy: selectedOwnerId } : {}),
     };
 
@@ -604,14 +612,27 @@ export function AdminListingFormPage() {
       setSaving(false);
       return;
     }
+    if (status !== 'draft' && (!loc.region?.trim() || !loc.district?.trim())) {
+      setSaveError('Select a region and district under "Region & suburb" before publishing.');
+      setSaving(false);
+      return;
+    }
 
     try {
       if (isEdit && id) {
-        await updateListing(id, payload);
+        // null clears optional fields server-side (Partial<Listing> only allows undefined)
+        await updateListing(id, payload as unknown as Partial<Listing>);
       } else {
-        await addListing(payload);
+        await addListing(payload as unknown as Omit<Listing, 'id' | 'listedDate' | 'updatedDate'>);
       }
-      navigate('/admin/listings');
+      // Agents: "Publish" actually submits for admin review — surface that clearly after save.
+      if (!isSuperAdmin && intent === 'published' && !lifecycleOverride) {
+        navigate('/admin/listings', { state: { submittedForReview: true } });
+      } else if (isSuperAdmin && intent === 'published' && !lifecycleOverride) {
+        navigate('/admin/listings', { state: { publishedLive: true } });
+      } else {
+        navigate('/admin/listings');
+      }
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'message' in err ? String((err as { message: string }).message) : 'Failed to save listing';
       setSaveError(msg);
@@ -632,8 +653,6 @@ export function AdminListingFormPage() {
           ] || []
         )
       : [];
-
-  const descLen = (formData.description || '').length;
 
   if (loading) {
     return (
@@ -691,6 +710,17 @@ export function AdminListingFormPage() {
             <Button variant="ghost" size="sm" className="shadow-none" onClick={() => navigate('/admin/listings')} disabled={saving}>
               <IcoX /> Cancel
             </Button>
+            {isEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openPublicPreview}
+                disabled={saving}
+                title="Opens the public listing page for the last saved version"
+              >
+                <IcoEye /> Preview
+              </Button>
+            )}
             <Button variant="secondary" size="sm" onClick={() => handleSave('draft')} disabled={saving}>
               {saving ? <IcoSpin /> : <IcoSave />}
               {saving ? 'Saving…' : isOffMarketStatus(formData.status) ? 'Save changes' : 'Save draft'}
@@ -779,6 +809,23 @@ export function AdminListingFormPage() {
               </div>
             )}
 
+            {isSuperAdmin && (
+              <label className="flex items-center gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={!!formData.featured}
+                  onChange={(e) => updateField('featured', e.target.checked)}
+                  className="w-4 h-4 rounded accent-orange-500"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-orange-900">Featured listing</p>
+                  <p className="text-xs text-orange-700 mt-0.5">
+                    Shows first on the category browse page as a normal listing, and in the featured carousel on search results
+                  </p>
+                </div>
+              </label>
+            )}
+
             {saveError && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
                 {saveError}
@@ -804,7 +851,7 @@ export function AdminListingFormPage() {
                       <IcoDollar /> Mark as sold
                     </Button>
                   )}
-                  {formData.listingType === 'RENT' && (
+                  {(formData.listingType === 'RENT' || formData.listingType === 'FLATMATES') && (
                     <Button
                       type="button"
                       variant="outline"
@@ -849,8 +896,8 @@ export function AdminListingFormPage() {
             >
               <div>
                 <span className="mb-2 block text-sm font-medium text-slate-700">Listing type</span>
-                <div className="grid grid-cols-2 gap-2 p-1 sm:max-w-md rounded-xl bg-slate-100 ring-1 ring-slate-200/80">
-                  {(['SALE', 'RENT'] as const).map((t) => {
+                <div className="grid grid-cols-3 gap-2 p-1 sm:max-w-lg rounded-xl bg-slate-100 ring-1 ring-slate-200/80">
+                  {(['SALE', 'RENT', 'FLATMATES'] as const).map((t) => {
                     const active = formData.listingType === t;
                     return (
                       <button
@@ -863,7 +910,7 @@ export function AdminListingFormPage() {
                             : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
-                        {t === 'SALE' ? 'For sale' : 'For rent'}
+                        {t === 'SALE' ? 'For sale' : t === 'RENT' ? 'For rent' : 'Flatmates'}
                       </button>
                     );
                   })}
@@ -879,17 +926,12 @@ export function AdminListingFormPage() {
               />
 
               <div>
-                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                  <label className="text-sm font-medium text-slate-700">Description</label>
-                  <span className="text-xs text-slate-400">{descLen} characters</span>
-                </div>
-                <textarea
-                  className={textareaClass}
-                  rows={7}
+                <label className="mb-2 block text-sm font-medium text-slate-700">Description</label>
+                <RichTextEditor
                   value={formData.description || ''}
-                  onChange={(e) => updateField('description', e.target.value)}
+                  onChange={(html) => updateField('description', html)}
                   placeholder="Highlight layout, condition, schools, transport, and what makes this home special."
-                  required
+                  maxLength={5000}
                 />
               </div>
 
@@ -1018,17 +1060,57 @@ export function AdminListingFormPage() {
                   value={formData.bathrooms ?? ''}
                   onChange={(e) => updateField('bathrooms', Number(e.target.value))}
                 />
+                {(formData.listingType === 'SALE' || formData.listingType === 'RENT') && (
+                  <>
+                    <StatInput
+                      icon={
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+                        </svg>
+                      }
+                      label="No. of lounges"
+                      type="number"
+                      min={0}
+                      value={formData.lounges ?? ''}
+                      onChange={(e) => updateField('lounges', Number(e.target.value))}
+                    />
+                    <StatInput
+                      icon={
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                        </svg>
+                      }
+                      label="No. of living"
+                      type="number"
+                      min={0}
+                      value={formData.livingRooms ?? ''}
+                      onChange={(e) => updateField('livingRooms', Number(e.target.value))}
+                    />
+                  </>
+                )}
                 <StatInput
                   icon={
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                     </svg>
                   }
-                  label="Parking"
+                  label="Garage spaces"
                   type="number"
                   min={0}
                   value={formData.parking ?? ''}
                   onChange={(e) => updateField('parking', Number(e.target.value))}
+                />
+                <StatInput
+                  icon={
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10l2.5 0M13 16H3m10 0h5.5M18 16V9.5A2.5 2.5 0 0015.5 7H13" />
+                    </svg>
+                  }
+                  label="Off-street spaces"
+                  type="number"
+                  min={0}
+                  value={formData.offStreetParking ?? ''}
+                  onChange={(e) => updateField('offStreetParking', e.target.value ? Number(e.target.value) : undefined)}
                 />
                 <StatInput
                   icon={
@@ -1050,32 +1132,12 @@ export function AdminListingFormPage() {
                 value={formData.landArea ?? ''}
                 onChange={(e) => updateField('landArea', e.target.value ? Number(e.target.value) : undefined)}
               />
-            </FormSection>
-
-            <FormSection
-              id="form-features"
-              title="Features & amenities"
-              subtitle="Tap to toggle — choose what genuinely applies."
-            >
-              <div className="flex flex-wrap gap-2">
-                {featuresOptions.map((feature) => {
-                  const on = formData.features?.includes(feature);
-                  return (
-                    <button
-                      key={feature}
-                      type="button"
-                      onClick={() => toggleFeature(feature)}
-                      className={`rounded-full border-2 px-3.5 py-2 text-left text-sm font-medium transition ${
-                        on
-                          ? 'border-primary-500 bg-primary-50 text-primary-900 shadow-sm'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      {feature}
-                    </button>
-                  );
-                })}
-              </div>
+              <Input
+                label="Parking description (optional)"
+                placeholder="e.g. 1 internal garage + 1 off-street, or Street parking only"
+                value={formData.parkingDescription ?? ''}
+                onChange={(e) => updateField('parkingDescription', e.target.value || undefined)}
+              />
             </FormSection>
 
             <div id="form-extras" className="scroll-mt-[11rem] sm:scroll-mt-[11.5rem]">
@@ -1101,6 +1163,16 @@ export function AdminListingFormPage() {
                   <Button variant="outline" onClick={() => navigate('/admin/listings')} disabled={saving}>
                     <IcoX /> Cancel
                   </Button>
+                  {isEdit && (
+                    <Button
+                      variant="outline"
+                      onClick={openPublicPreview}
+                      disabled={saving}
+                      title="Opens the public listing page for the last saved version"
+                    >
+                      <IcoEye /> Preview as public
+                    </Button>
+                  )}
                   <Button variant="secondary" onClick={() => handleSave('draft')} disabled={saving}>
                     {saving ? <IcoSpin /> : <IcoSave />}
                     {saving ? 'Saving…' : isOffMarketStatus(formData.status) ? 'Save changes' : 'Save draft'}

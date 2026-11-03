@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Background circle -->
+  <rect width="64" height="64" rx="14" fill="#0d5c63"/>
+  <!-- House shape -->
+  <!-- Roof -->
+  <polygon points="32,10 8,32 56,32" fill="white" opacity="0.95"/>
+  <!-- Door/chimney top detail -->
+  <rect x="26" y="14" width="4" height="8" rx="1" fill="#0d5c63"/>
+  <!-- House body -->
+  <rect x="13" y="31" width="38" height="22" rx="2" fill="white" opacity="0.95"/>
+  <!-- Door -->
+  <rect x="27" y="40" width="10" height="13" rx="2" fill="#0d5c63"/>
+  <!-- Windows -->
+  <rect x="16" y="36" width="8" height="7" rx="1.5" fill="#0d5c63" opacity="0.7"/>
+  <rect x="40" y="36" width="8" height="7" rx="1.5" fill="#0d5c63" opacity="0.7"/>
+</svg>

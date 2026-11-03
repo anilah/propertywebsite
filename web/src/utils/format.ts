@@ -24,26 +24,86 @@ export function formatRent(listing: Listing): string {
 }
 
 /**
- * Short area line (suburb + district)
+ * Short area line (suburb + district). Skips empty parts so we never show ", Auckland City".
  */
-export function formatAddress(location: { region: string; district: string; suburb: string }): string {
-  return `${location.suburb}, ${location.district}`;
+export function formatAddress(location: { region?: string; district?: string; suburb?: string }): string {
+  return [location.suburb, location.district]
+    .map((p) => (typeof p === 'string' ? p.trim() : ''))
+    .filter(Boolean)
+    .join(', ');
+}
+
+function normalizeAddressPart(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[.,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** True when `part` is already covered by text already in the address. */
+function addressPartRedundant(part: string, existing: string): boolean {
+  const p = normalizeAddressPart(part);
+  const e = normalizeAddressPart(existing);
+  if (!p || !e) return false;
+  if (e.includes(p)) return true;
+  const tokens = p.split(' ').filter((t) => t.length > 1);
+  if (tokens.length === 0) return false;
+  const hits = tokens.filter((t) => e.includes(t)).length;
+  // "Auckland City" vs "... Auckland ..." / "... Manukau City ..."
+  return hits >= Math.ceil(tokens.length * 0.6);
 }
 
 /**
- * Full street-style address for detail pages / maps
+ * Card / list location line — prefers street address, then suburb/district (deduped).
+ */
+export function formatListingLocationLine(
+  listing: Pick<Listing, 'location' | 'streetAddress'>
+): string {
+  const street = (listing.streetAddress || '').trim().replace(/[.\s]+$/g, '');
+  const extras = [listing.location?.suburb, listing.location?.district, listing.location?.region]
+    .map((p) => (typeof p === 'string' ? p.trim() : ''))
+    .filter(Boolean);
+
+  const parts: string[] = [];
+  for (const part of [street, ...extras]) {
+    if (!part) continue;
+    const assembled = parts.join(', ');
+    if (assembled && addressPartRedundant(part, assembled)) continue;
+    parts.push(part);
+  }
+  return parts.join(', ');
+}
+
+/**
+ * Full street-style address for detail pages / maps.
+ * Dedupes when streetAddress already contains suburb/city/country (common after geocode paste).
  */
 export function formatFullAddress(
   listing: Pick<Listing, 'location' | 'streetAddress' | 'city' | 'postalCode'>
 ): string {
   const { location, streetAddress, city, postalCode } = listing;
-  const tail = [location.suburb, location.district, city, location.region, postalCode, 'New Zealand'].filter(
-    Boolean
-  );
-  if (streetAddress?.trim()) {
-    return `${streetAddress.trim()}, ${tail.join(', ')}`;
+  const street = (streetAddress || '').trim().replace(/[.\s]+$/g, '');
+
+  const candidates = [
+    street,
+    location?.suburb,
+    location?.district,
+    // Ignore mistaken city values like "New Zealand"
+    city && !/^new\s*zealand$/i.test(city.trim()) ? city : undefined,
+    location?.region,
+    postalCode,
+  ]
+    .map((p) => (typeof p === 'string' ? p.trim().replace(/[.\s]+$/g, '') : ''))
+    .filter(Boolean);
+
+  const parts: string[] = [];
+  for (const part of candidates) {
+    const assembled = parts.join(', ');
+    if (assembled && addressPartRedundant(part, assembled)) continue;
+    parts.push(part);
   }
-  return tail.join(', ');
+  return parts.join(', ');
 }
 
 /** e.g. 2 full baths + 1 half → "2.5 bathrooms" */

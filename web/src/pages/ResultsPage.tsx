@@ -1,21 +1,30 @@
 import { useEffect, useState, lazy, Suspense } from "react";
 import { useLocation, Link } from "react-router-dom";
 import { useApiListingsStore } from "../store/apiListingsStore";
+import { useSiteConfig } from "../context/SiteConfigContext";
 import { ResultsListingCard } from "../components/listings/ResultsListingCard";
 import { PromotedListingsCarousel } from "../components/listings/PromotedListingsCarousel";
 import { RefinePanel } from "../components/listings/RefinePanel";
 import { Pagination } from "../components/ui/Pagination";
 import { SortOption } from "../types";
-import { isPropertySearchPath, parseListingTypeFromPath, searchPath } from "../utils/listingRoutes";
+import { isPropertySearchPath, parseListingTypeFromPath } from "../utils/listingRoutes";
 import { locationHierarchy } from "../data/mockListings";
+import { trackSearchResults, trackListingClick } from "../components/analytics/GoogleAnalytics";
 
 // Lazy-load split map+list view (heavy bundle; avoids window errors on initial render)
 const MapResultsView = lazy(() =>
   import("../components/listings/MapResultsView").then((m) => ({ default: m.MapResultsView }))
 );
 
+function listTypeListName(listingType: string): string {
+  if (listingType === "RENT") return "Properties for Rent";
+  if (listingType === "FLATMATES") return "Flatmates Wanted";
+  return "Properties for Sale";
+}
+
 export function ResultsPage() {
   const location = useLocation();
+  const { config: siteConfig } = useSiteConfig();
   const {
     listings: displayedListings,
     loading,
@@ -55,7 +64,37 @@ export function ResultsPage() {
     fetchListings();
   }, [fetchListings, filters.listingType, filters.region, filters.district, filters.suburb, filters.minPrice, filters.maxPrice, filters.minBedrooms, filters.minBathrooms, filters.minParking, filters.propertyType, filters.keyword, sortBy, currentPage]);
 
-  const isRent = filters.listingType === "RENT";
+  // GA4: track search results whenever the listing set changes
+  useEffect(() => {
+    if (loading || displayedListings.length === 0) return;
+    const listName = listTypeListName(filters.listingType);
+    trackSearchResults(
+      displayedListings.map((l) => ({
+        id: l.id,
+        headline: l.headline,
+        listingType: l.listingType,
+        propertyType: l.propertyType,
+        suburb: l.location?.suburb,
+        district: l.location?.district,
+        region: l.location?.region,
+        price: l.price,
+        rentPerWeek: l.rentPerWeek,
+        agencyDisplayName: l.agencyDisplayName ?? undefined,
+      })),
+      listName,
+      filters.keyword,
+    );
+  // Only re-fire when the result set actually changes (not on every render)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayedListings]);
+
+  const isRentPage = filters.listingType === "RENT";
+  const isFlatmatesPage = filters.listingType === "FLATMATES";
+  const heroLabel = listTypeListName(filters.listingType);
+  const typeUrlPath = isFlatmatesPage ? "/flatmates" : isRentPage ? "/rent" : "/sale";
+  const typeCrumbLabel = isFlatmatesPage ? "Flatmates" : isRentPage ? "Rent" : "Sale";
+
+  const isRent = isRentPage || isFlatmatesPage;
   const priceTiers = isRent
     ? [
         { v: 200, label: "$200+ /wk" },
@@ -81,68 +120,53 @@ export function ResultsPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Breadcrumbs - Trade Me style */}
-        <nav className="text-sm text-gray-600 mb-4">
-          <ol className="flex items-center space-x-2">
-            <li>
-              <Link to="/" className="hover:text-primary-600">
-                Home
-              </Link>
-            </li>
-            <li>/</li>
-            <li>
-              <Link to={filters.listingType === "SALE" ? "/sale" : "/rent"} className="hover:text-primary-600">
-                Property
-              </Link>
-            </li>
-            <li>/</li>
-            <li>
-              <span className="text-gray-900">Residential</span>
-            </li>
-            <li>/</li>
-            <li>
-              <Link to={searchPath(filters.listingType)} className="hover:text-primary-600 text-gray-900">
-                {filters.listingType === "SALE" ? "Sale" : "Rent"}
-              </Link>
-            </li>
-          </ol>
-        </nav>
 
-        {/* Main Heading */}
-        <h1 className="text-3xl sm:text-4xl font-bold text-primary-700 mb-6">
-          HOMES & REAL ESTATE FOR {filters.listingType === "SALE" ? "SALE" : "RENT"}
-        </h1>
+      {/* ── Brand hero banner ── */}
+      <div
+        className="w-full"
+        style={{ background: `linear-gradient(135deg, var(--color-primary-800, #1e40af) 0%, var(--color-primary-600, #2563eb) 100%)` }}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-9">
+          {/* Breadcrumbs inside banner */}
+          <nav className="hidden sm:block text-xs text-white/60 mb-3">
+            <ol className="flex items-center gap-1.5">
+              <li><Link to="/" className="hover:text-white transition-colors">Home</Link></li>
+              <li className="text-white/40">/</li>
+              <li><Link to={typeUrlPath} className="hover:text-white transition-colors">Property</Link></li>
+              <li className="text-white/40">/</li>
+              <li className="text-white/80">Residential {typeCrumbLabel}</li>
+            </ol>
+          </nav>
 
-        {/* Search Bar */}
-        <div className="mb-6">
-          <div className="relative">
+          <h1 className="text-xl sm:text-3xl font-bold text-white tracking-tight">
+            {heroLabel}
+          </h1>
+          <p className="mt-1 text-sm text-white/70 hidden sm:block">
+            {siteConfig.tagline}
+          </p>
+
+          {/* Inline keyword search */}
+          <div className="mt-4 relative max-w-xl">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <svg
-                className="w-5 h-5 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
+              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
             <input
               type="text"
-              placeholder="Add keywords e.g. pool, garage, income"
+              placeholder="Search by suburb, city, or keyword…"
               value={keywordInput}
               onChange={(e) => setKeywordInput(e.target.value)}
               onBlur={() => setFilters({ keyword: keywordInput.trim() || undefined })}
               onKeyDown={(e) => e.key === "Enter" && setFilters({ keyword: keywordInput.trim() || undefined })}
-              className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-400"
+              className="w-full pl-11 pr-4 py-2.5 rounded-xl border-0 shadow-lg text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-white/50"
             />
           </div>
         </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
 
         {/* Filter Buttons Row — outlined pill style */}
         <div className="flex flex-wrap items-center gap-2 mb-6">
@@ -319,7 +343,7 @@ export function ResultsPage() {
                       // carousel (TradeMe Super Feature style). On pages 2+, render every listing
                       // with the standard card (no promoted block).
                       const promoted = currentPage === 1
-                        ? displayedListings.filter((l) => l.platinumPartner)
+                        ? displayedListings.filter((l) => l.featured)
                         : [];
                       const promotedIds = new Set(promoted.map((l) => l.id));
                       const regular = displayedListings.filter((l) => !promotedIds.has(l.id));
@@ -329,8 +353,27 @@ export function ResultsPage() {
                             <PromotedListingsCarousel listings={promoted} />
                           )}
                           <div className="space-y-6">
-                            {regular.map((listing) => (
-                              <ResultsListingCard key={listing.id} listing={listing} />
+                            {regular.map((listing, idx) => (
+                              <ResultsListingCard
+                                key={listing.id}
+                                listing={listing}
+                                onCardClick={() => trackListingClick(
+                                  {
+                                    id: listing.id,
+                                    headline: listing.headline,
+                                    listingType: listing.listingType,
+                                    propertyType: listing.propertyType,
+                                    suburb: listing.location?.suburb,
+                                    district: listing.location?.district,
+                                    region: listing.location?.region,
+                                    price: listing.price,
+                                    rentPerWeek: listing.rentPerWeek,
+                                    agencyDisplayName: listing.agencyDisplayName ?? undefined,
+                                  },
+                                  listTypeListName(filters.listingType),
+                                  idx,
+                                )}
+                              />
                             ))}
                           </div>
                         </>

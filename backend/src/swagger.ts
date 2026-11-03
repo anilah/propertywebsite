@@ -42,7 +42,7 @@ export const swaggerDocument = {
       post: {
         tags: ['Auth'],
         summary: 'Send OTP',
-        description: 'Send a one-time password to the given NZ mobile number. Valid format: 0XXXXXXXXX (10 digits).',
+        description: 'Send a one-time password to the given NZ mobile number. Valid format: 10–11 domestic digits (e.g. 0211234567 or 02102188860).',
         requestBody: {
           required: true,
           content: {
@@ -392,7 +392,7 @@ export const swaggerDocument = {
         summary: 'List listings',
         description: 'Get published listings with optional filters and pagination.',
         parameters: [
-          { name: 'listingType', in: 'query', schema: { type: 'string', enum: ['SALE', 'RENT'] } },
+          { name: 'listingType', in: 'query', schema: { type: 'string', enum: ['SALE', 'RENT', 'FLATMATES'] } },
           { name: 'region', in: 'query', schema: { type: 'string' } },
           { name: 'district', in: 'query', schema: { type: 'string' } },
           { name: 'suburb', in: 'query', schema: { type: 'string' } },
@@ -548,7 +548,7 @@ export const swaggerDocument = {
         type: 'object',
         properties: {
           id: { type: 'string' },
-          listingType: { type: 'string', enum: ['SALE', 'RENT'] },
+          listingType: { type: 'string', enum: ['SALE', 'RENT', 'FLATMATES'] },
           status: { type: 'string', enum: ['DRAFT', 'PUBLISHED'] },
           headline: { type: 'string' },
           description: { type: 'string' },
@@ -566,6 +566,8 @@ export const swaggerDocument = {
           priceNegotiable: { type: 'boolean' },
           bedrooms: { type: 'integer' },
           bathrooms: { type: 'integer' },
+          lounges: { type: 'integer' },
+          livingRooms: { type: 'integer' },
           parking: { type: 'integer' },
           floorArea: { type: 'number', nullable: true },
           landArea: { type: 'number', nullable: true },
@@ -581,7 +583,7 @@ export const swaggerDocument = {
         type: 'object',
         required: ['listingType', 'headline', 'description', 'propertyType', 'region', 'district', 'suburb', 'bedrooms', 'bathrooms', 'parking'],
         properties: {
-          listingType: { type: 'string', enum: ['SALE', 'RENT'] },
+          listingType: { type: 'string', enum: ['SALE', 'RENT', 'FLATMATES'] },
           status: { type: 'string', enum: ['DRAFT', 'PUBLISHED'] },
           headline: { type: 'string' },
           description: { type: 'string' },
@@ -594,6 +596,8 @@ export const swaggerDocument = {
           priceNegotiable: { type: 'boolean' },
           bedrooms: { type: 'integer' },
           bathrooms: { type: 'integer' },
+          lounges: { type: 'integer' },
+          livingRooms: { type: 'integer' },
           parking: { type: 'integer' },
           floorArea: { type: 'number', nullable: true },
           landArea: { type: 'number', nullable: true },

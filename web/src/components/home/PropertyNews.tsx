@@ -1,23 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { newsArticles } from "../../data/newsArticles";
+import { contentApi, type ContentPostSummary } from "../../services/api";
 
 export function PropertyNews() {
+  const [articles, setArticles] = useState<ContentPostSummary[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Show the most recent non-featured articles on the home page.
-  const homeArticles = newsArticles.filter((a) => !a.featured).slice(0, 5);
-  const visibleArticles = homeArticles.slice(currentIndex, currentIndex + 3);
+  useEffect(() => {
+    contentApi.listPosts({ type: 'news', limit: 5 })
+      .then(r => setArticles(r.posts))
+      .catch(() => {});
+  }, []);
 
-  const goToPrevious = () => {
-    setCurrentIndex((prev) => Math.max(0, prev - 1));
-  };
+  const visibleArticles = articles.slice(currentIndex, currentIndex + 3);
 
-  const goToNext = () => {
-    setCurrentIndex((prev) =>
-      Math.min(homeArticles.length - 3, prev + 1)
-    );
-  };
+  if (articles.length === 0) return null;
 
   return (
     <section className="pt-6 pb-10 bg-white">
@@ -28,8 +25,6 @@ export function PropertyNews() {
           </h2>
           <Link
             to="/news"
-            target="_blank"
-            rel="noopener noreferrer"
             className="text-primary-600 hover:text-primary-700 font-medium text-sm sm:text-base"
           >
             View all
@@ -37,78 +32,59 @@ export function PropertyNews() {
         </div>
 
         <div className="relative">
-          {/* Navigation Arrows */}
           {currentIndex > 0 && (
             <button
-              onClick={goToPrevious}
+              onClick={() => setCurrentIndex(i => Math.max(0, i - 1))}
               className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 sm:-translate-x-6 z-10 bg-white rounded-full p-2 sm:p-3 shadow-lg hover:shadow-xl transition-shadow"
               aria-label="Previous articles"
             >
-              <svg
-                className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 19l-7-7 7-7"
-                />
+              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
           )}
-
-          {currentIndex < homeArticles.length - 3 && (
+          {currentIndex < articles.length - 3 && (
             <button
-              onClick={goToNext}
+              onClick={() => setCurrentIndex(i => Math.min(articles.length - 3, i + 1))}
               className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 sm:translate-x-6 z-10 bg-white rounded-full p-2 sm:p-3 shadow-lg hover:shadow-xl transition-shadow"
               aria-label="Next articles"
             >
-              <svg
-                className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5l7 7-7 7"
-                />
+              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
           )}
 
-          {/* News Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {visibleArticles.map((article) => (
-              <a
+            {visibleArticles.map(article => (
+              <Link
                 key={article.id}
-                href={`/news/${article.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
+                to={`/news/${article.slug}`}
                 className="group block bg-white rounded-xl shadow-md hover:shadow-xl transition-shadow overflow-hidden"
               >
                 <div className="relative aspect-[4/3] bg-gray-200 overflow-hidden">
-                  <img
-                    src={article.image}
-                    alt={article.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
+                  {article.imageUrl && (
+                    <img
+                      src={article.imageUrl}
+                      alt={article.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  )}
                 </div>
                 <div className="p-5">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-primary-600 transition-colors">
+                  {article.category && (
+                    <span className="text-xs font-medium text-primary-600 uppercase tracking-wide">{article.category}</span>
+                  )}
+                  <h3 className="text-lg font-semibold text-gray-900 mt-1 mb-2 line-clamp-2 group-hover:text-primary-600 transition-colors">
                     {article.title}
                   </h3>
-                  <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                    {article.description}
+                  <p className="text-sm text-gray-600 mb-3 line-clamp-2">{article.excerpt}</p>
+                  <p className="text-xs text-gray-400">
+                    {new Date(article.createdAt).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {article.readTime && ` · ${article.readTime}`}
                   </p>
-                  <p className="text-xs text-gray-500">{article.date}</p>
                 </div>
-              </a>
+              </Link>
             ))}
           </div>
         </div>

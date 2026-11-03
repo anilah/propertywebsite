@@ -4,13 +4,22 @@ import cors from 'cors';
 import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
 import { getSwaggerDocument } from './swagger.js';
-import { listingsRouter } from './routes/listings.js';
+import { listingsRouter, adminListingsRouter, adminEnquiriesRouter } from './routes/listings.js';
 import { authRouter } from './routes/auth.js';
 import { agentsRouter } from './routes/agents.js';
 import { uploadRouter } from './routes/upload.js';
 import { parcelInfoRouter } from './routes/parcelInfo.js';
+import { schoolZonesRouter } from './routes/schoolZones.js';
+import { geocodeRouter } from './routes/geocode.js';
+import { campaignsRouter } from './routes/campaigns.js';
+import { campaignWebhooksRouter } from './routes/campaignWebhooks.js';
+import { integrationsRouter } from './routes/integrations.js';
+import brandingRouter from './routes/branding.js';
+import { contentRouter } from './routes/content.js';
+import { tradiesRouter, adminTradiesRouter } from './routes/tradies.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
+import { getSiteConfig } from './controllers/siteConfigController.js';
 
 /** Comma-separated `CORS_ORIGIN`, e.g. `https://d4ua3a4iyx8c3.cloudfront.net,http://localhost:5173` */
 function getAllowedOrigins(): string[] {
@@ -103,11 +112,27 @@ export function createApp() {
   );
 
   // API Routes
+  app.get('/api/config/site', getSiteConfig);
   app.use('/api/auth', authRouter);
   app.use('/api/listings', listingsRouter);
+  app.use('/api/admin/listings', adminListingsRouter);
+  app.use('/api/admin/enquiries', adminEnquiriesRouter);
   app.use('/api/admin/agents', agentsRouter);
   app.use('/api/upload', uploadRouter);
   app.use('/api/parcel-info', parcelInfoRouter);
+  app.use('/api/school-zones', schoolZonesRouter);
+  app.use('/api/admin/geocode', geocodeRouter);
+  // Campaigns CRUD (super admin only)
+  app.use('/api/admin/campaigns', campaignsRouter);
+  // Lead capture webhooks (public — no auth — for Meta/Google/TikTok callbacks)
+  app.use('/api/webhooks', campaignWebhooksRouter);
+  // Platform integration settings (super admin only)
+  app.use('/api/admin/integrations', integrationsRouter);
+  // Branding settings — GET public, PUT super admin only
+  app.use('/api/admin/branding', brandingRouter);
+  app.use('/api/content', contentRouter);
+  app.use('/api/tradies', tradiesRouter);
+  app.use('/api/admin/tradies', adminTradiesRouter);
 
   // Error handling
   app.use(errorHandler);

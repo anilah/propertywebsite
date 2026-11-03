@@ -10,9 +10,10 @@ import { useEffect, useMemo, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { useNavigate } from 'react-router-dom';
-import type { Listing } from '../../types';
+import type { Listing, ListingType } from '../../types';
 import { listingDetailPath } from '../../utils/listingRoutes';
-import { formatSalePrice, formatRent, formatAddress } from '../../utils/format';
+import { formatSalePrice, formatRent, formatListingLocationLine } from '../../utils/format';
+import { listingCoverImage } from '../../utils/listingImages';
 
 // Fix Leaflet's default icon paths broken by bundlers
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -23,8 +24,8 @@ L.Icon.Default.mergeOptions({
 });
 
 // Custom price-label marker
-function makePriceIcon(label: string, type: 'SALE' | 'RENT', highlighted: boolean) {
-  const baseBg = type === 'SALE' ? '#1d4ed8' : '#059669';
+function makePriceIcon(label: string, type: ListingType, highlighted: boolean) {
+  const baseBg = type === 'SALE' ? '#1d4ed8' : type === 'FLATMATES' ? '#7c3aed' : '#059669';
   const bg = highlighted ? '#ea580c' : baseBg;
   const scale = highlighted ? 1.15 : 1;
   const z = highlighted ? 1000 : 'auto';
@@ -139,11 +140,11 @@ export function MapView({
               : formatRent(listing);
 
           const thumbnail =
-            listing.images?.[0] ||
+            listingCoverImage(listing) ||
             `https://picsum.photos/seed/${listing.id}/320/200`;
 
           const isHi = hoveredId === listing.id || selectedId === listing.id;
-          const icon = makePriceIcon(price, listing.listingType as 'SALE' | 'RENT', isHi);
+          const icon = makePriceIcon(price, listing.listingType, isHi);
 
           return (
             <Marker
@@ -179,9 +180,15 @@ export function MapView({
                     <span className={`inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
                       listing.listingType === 'SALE'
                         ? 'bg-blue-100 text-blue-700'
-                        : 'bg-emerald-100 text-emerald-700'
+                        : listing.listingType === 'FLATMATES'
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'bg-emerald-100 text-emerald-700'
                     }`}>
-                      For {listing.listingType === 'SALE' ? 'Sale' : 'Rent'}
+                      {listing.listingType === 'SALE'
+                        ? 'For Sale'
+                        : listing.listingType === 'FLATMATES'
+                          ? 'Flatmates Wanted'
+                          : 'For Rent'}
                     </span>
                     {listing.propertyType && (
                       <span className="ml-1.5 text-[10px] text-gray-500">{listing.propertyType}</span>
@@ -195,7 +202,7 @@ export function MapView({
 
                   {/* Address */}
                   <p className="text-xs text-gray-500 mb-2">
-                    {formatAddress(listing.location)}
+                    {formatListingLocationLine(listing)}
                   </p>
 
                   {/* Stats + Price */}

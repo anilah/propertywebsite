@@ -44,7 +44,7 @@ const ALLOWED_TYPES: Record<string, string> = {
   ...ALLOWED_VIDEO_TYPES,
 };
 
-const ALLOWED_FOLDERS = ['profiles', 'listings', 'uploads'];
+const ALLOWED_FOLDERS = ['profiles', 'listings', 'tradies', 'uploads'];
 const PRESIGN_EXPIRES_SECONDS = 300; // 5 minutes
 const MAX_VIDEO_BYTES = 500 * 1024 * 1024; // 500 MB local-upload cap for video
 

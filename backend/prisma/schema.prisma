@@ -31,9 +31,13 @@ model User {
   agencyName    String?
   licenseNumber String?
   profilePhotoUrl String?
+  // Agency branding — used on listing cards and detail pages
+  agencyLogoUrl          String?  // URL of the agency logo image (shown in card header banner)
+  agencyBrandColor       String?  // Hex brand color e.g. "#1a1a2e" (used for card header + agent sidebar)
   // Listing-facing branding (office + optional display overrides; single source vs per-listing form)
   officeBranchName       String?
   officePhone            String?
+  whatsappNumber         String?  // WhatsApp contact number; shown as WA button on listing detail page
   officeWebsite          String?
   appraisalUrl           String?
   platinumPartner        Boolean  @default(false)
@@ -77,6 +81,8 @@ model Listing {
   bedrooms        Int
   bathrooms       Int
   halfBathrooms   Int           @default(0) // e.g. 2 full + 1 half → “2.5 bathrooms”
+  lounges         Int           @default(0)
+  livingRooms     Int           @default(0)
   parking         Int
   offStreetParking Int?         // count for “X Off-street parking” badges
   ensuiteCount    Int           @default(0)
@@ -104,6 +110,10 @@ model Listing {
   layoutOptions     String?    @db.Text // e.g. alternate floor plans copy
   openHomesNote     String?    @db.Text // “No times scheduled” or intro copy
 
+  // Campaign marketing package (paste-ready ad copy + property deep link)
+  marketingCopy     String?    @db.Text
+  marketingLink     String?
+
   // Agency / office display (sidebar; can differ from agent User profile)
   agencyDisplayName String?    @db.Text // e.g. “Barfoot & Thompson Mission Bay”
   agencyLicense     String?    // e.g. “Licensed: REAA 2008”
@@ -112,6 +122,7 @@ model Listing {
   officeWebsite     String?
   appraisalUrl      String?
   platinumPartner   Boolean    @default(false)
+  featured          Boolean    @default(false) // manually marked "Featured" by admin/agent, independent of platinumPartner
 
   // Optional display overrides for listing card / detail (co-listing support)
   listingAgentDisplayName String?
@@ -198,14 +209,23 @@ model ListingDocument {
 }
 
 model Enquiry {
-  id        String   @id @default(uuid())
-  listingId String
-  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  name      String
-  email     String
-  phone     String?
-  message   String   @db.Text
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  listingId  String
+  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  name       String
+  email      String
+  phone      String?
+  message    String   @db.Text
+  /// JSON audit of SES/SMTP delivery attempts (agent / admin / buyer).
+  emailAudit String?  @db.Text
+  /// Where the enquirer came from: facebook | instagram | tiktok | whatsapp | google | email | other (null = direct / unknown)
+  source      String?
+  utmMedium   String?
+  utmCampaign String?
+  /// Set when utm_campaign matches a Kaboo campaign (posts published from Admin → Campaigns)
+  campaignId  String?
+  referrer    String?  @db.Text
+  createdAt  DateTime @default(now())
 
   @@map("enquiries")
 }
@@ -219,4 +239,203 @@ model OTP {
   createdAt   DateTime @default(now())
   
   @@map("otps")
+}
+
+// ─── Platform Integration Settings (Sprint 3) ────────────────────────────────
+// Stores per-platform credentials entered by super admin.
+// Values are AES-256-GCM encrypted at rest using SETTINGS_ENCRYPTION_KEY env var.
+// platform: META | GOOGLE | TIKTOK
+model PlatformSetting {
+  id        String   @id @default(uuid())
+  platform  String   @unique  // one row per platform
+  config    String   @db.Text // JSON blob (encrypted)
+  isActive  Boolean  @default(false)
+  lastTestedAt DateTime?
+  lastTestOk   Boolean?
+  lastTestMsg  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_settings")
+}
+
+// ─── Digital Marketing Campaigns (Sprint 3) ──────────────────────────────────
+
+// platform: META | GOOGLE | TIKTOK
+// campaignType: per platform (AWARENESS | TRAFFIC | LEAD_GENERATION | SALES | REACH | VIDEO_VIEWS |
+//               SEARCH | DISPLAY | VIDEO | PERFORMANCE_MAX)
+// campaignSubtype: ad format (SINGLE_IMAGE | CAROUSEL | VIDEO | STORIES | REELS |
+//                 RESPONSIVE_SEARCH | RESPONSIVE_DISPLAY | IN_FEED_AD | TOPVIEW)
+// status: DRAFT | SCHEDULED | ACTIVE | PAUSED | COMPLETED | ARCHIVED
+model Campaign {
+  id                  String   @id @default(uuid())
+  title               String
+  platform            String   // META | GOOGLE | TIKTOK
+  campaignType        String   // per-platform objective
+  campaignSubtype     String?  // ad format
+  status              String   @default("DRAFT")
+  objective           String?  // human-readable objective note
+  // Budget
+  budgetType          String   @default("DAILY")  // DAILY | LIFETIME
+  budgetAmount        Float?
+  currency            String   @default("NZD")
+  // Schedule
+  startDate           DateTime?
+  endDate             DateTime?
+  // Targeting (stored as JSON string: { ageMin, ageMax, genders, locations, interests, languages })
+  targetAudience      String?  @db.Text
+  // Platform integration
+  platformConfig      String?  @db.Text  // JSON: pixelId, accountId, pageId, adAccountId, etc.
+  externalCampaignId  String?  // ID returned by platform after publishing
+  externalAdSetId     String?
+  externalAdId        String?
+  // Selected listings (JSON array of listing IDs)
+  listingIds          String   @default("[]") @db.Text
+  // Ad content
+  headline            String?  @db.Text
+  primaryText         String?  @db.Text
+  description         String?  @db.Text
+  callToAction        String?  // LEARN_MORE | CONTACT_US | APPLY_NOW | GET_QUOTE | BOOK_NOW
+  destinationUrl      String?  // landing page url (default: listing page)
+  // Lead form config (JSON: fields[], thankYouMessage, privacy)
+  leadFormConfig      String?  @db.Text
+  // Internal notes
+  notes               String?  @db.Text
+  createdBy           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  assets  CampaignAsset[]
+  leads   CampaignLead[]
+
+  @@map("campaigns")
+}
+
+// Campaign media assets (images, videos) uploaded by admin
+model CampaignAsset {
+  id           String   @id @default(uuid())
+  campaignId   String
+  campaign     Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  assetType    String   // IMAGE | VIDEO | LOGO | COVER
+  url          String
+  thumbnailUrl String?
+  format       String?  // SQUARE | LANDSCAPE | PORTRAIT | STORY | VERTICAL_VIDEO
+  width        Int?
+  height       Int?
+  durationSec  Int?     // video duration in seconds
+  fileSize     Int?     // bytes
+  mimeType     String?
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@map("campaign_assets")
+}
+
+// Leads captured from platform webhooks or manual entry
+model CampaignLead {
+  id           String   @id @default(uuid())
+  campaignId   String
+  campaign     Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  platform     String   // META | GOOGLE | TIKTOK | MANUAL
+  listingId    String?  // which listing they were interested in
+  leadFormId   String?  // platform's native lead form ID
+  // Contact info
+  fullName     String?
+  email        String?
+  phone        String?
+  message      String?  @db.Text
+  // Extra fields (JSON: additional question answers from platform lead form)
+  extraFields  String?  @db.Text
+  rawPayload   String?  @db.Text  // full webhook body for audit
+  // CRM lifecycle
+  status       String   @default("NEW")  // NEW | CONTACTED | QUALIFIED | CONVERTED | LOST
+  notes        String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("campaign_leads")
+}
+
+// ── CMS content ───────────────────────────────────────────────────────────────
+// Stores both news articles (type = "news") and property guides (type = "guide").
+// body is a JSON object:
+//   news  → { "paragraphs": ["...", "..."] }
+//   guide → { "sections": [{ "heading": "...", "body": ["...", "..."] }] }
+
+model ContentPost {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  type        String   // "news" | "guide"
+  title       String
+  excerpt     String   @db.Text
+  body        Json
+  imageUrl    String?  @map("image_url")
+  category    String?
+  featured    Boolean  @default(false)
+  published   Boolean  @default(true)
+  readTime    String?  @map("read_time")
+  sortOrder   Int      @default(0)  @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt      @map("updated_at")
+  createdBy   String?  @map("created_by")
+
+  @@index([type, published])
+  @@index([slug])
+  @@map("content_posts")
+}
+
+// ── Tradie directory ──────────────────────────────────────────────────────────
+// Property-related service providers onboarded by super admins; searched by the public.
+// List fields are JSON-encoded string arrays (Aurora DSQL has no array/jsonb columns).
+// Empty district = serves the whole region; empty suburbs = serves the whole district.
+
+model Tradie {
+  id             String   @id @default(uuid())
+  slug           String   @unique
+  businessName   String
+  contactName    String?
+  categories     String   @default("[]") @db.Text
+  skills         String   @default("[]") @db.Text
+  description    String?  @db.Text
+  /// Short headline under the business name (e.g. “Licensed builders · North Shore”)
+  tagline        String?
+  yearsExperience Int?
+  /// Insurance / LBP / warranty note shown on the public profile
+  insuranceInfo  String?  @db.Text
+  /// JSON string[] of work / project photo URLs (gallery, like listing photos)
+  workImages     String   @default("[]") @db.Text
+  phone          String
+  whatsappNumber String?
+  email          String?
+  website        String?
+  photoUrl       String?
+  licenseNumber  String?
+  region         String?
+  district       String?
+  suburbs        String   @default("[]") @db.Text
+  isActive       Boolean  @default(true)
+  featured       Boolean  @default(false)
+  callClicks     Int      @default(0)
+  whatsappClicks Int      @default(0)
+  createdBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  enquiries      TradieEnquiry[]
+
+  @@map("tradies")
+}
+
+/// Public “Enquire” leads for tradies (phone stays private — same idea as listing enquiries).
+model TradieEnquiry {
+  id        String   @id @default(uuid())
+  tradieId  String
+  tradie    Tradie   @relation(fields: [tradieId], references: [id], onDelete: Cascade)
+  name      String
+  email     String
+  phone     String?
+  message   String   @db.Text
+  intent    String?
+  createdAt DateTime @default(now())
+
+  @@map("tradie_enquiries")
 }

@@ -8,13 +8,27 @@
   * {
     @apply antialiased;
   }
-  
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     @apply text-gray-900 bg-gray-50 font-sans;
+    /* Standalone PWA: avoid content under notch / home indicator */
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
-  
+
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold;
+  }
+
+  /* Prevent iOS zoom on form focus (16px+ inputs) */
+  @media (max-width: 640px) {
+    input, select, textarea {
+      font-size: 16px;
+    }
   }
 }
 
@@ -25,7 +39,20 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-  
+
+  .pb-safe {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+
+  .pt-safe {
+    padding-top: max(0px, env(safe-area-inset-top));
+  }
+
+  .min-h-touch {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
   @keyframes slide-in {
     from {
       transform: translateX(100%);
@@ -36,9 +63,89 @@
       opacity: 1;
     }
   }
-  
+
   .animate-slide-in {
     animation: slide-in 0.3s ease-out;
+  }
+
+  @keyframes sheet-up {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .animate-sheet-up {
+    animation: sheet-up 0.28s ease-out;
+  }
+
+  @keyframes hero-ken {
+    from { transform: scale(1.05); }
+    to { transform: scale(1.12); }
+  }
+}
+
+/* Hide website footer / desktop chrome when app shell is active */
+.app-shell--mobile .site-footer-desktop {
+  display: none;
+}
+
+.app-bottom-nav {
+  /* Ensure tabs never sit under iOS home indicator incorrectly */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/*
+ * HARD RULE — desktop/laptop (mouse or trackpad):
+ * always website UI. Ignores JS appShell and window width.
+ * This is what fixes "PWA shell on desktop Chrome".
+ */
+@media (hover: hover) and (pointer: fine) {
+  .app-bottom-nav {
+    display: none !important;
+  }
+  .kaboo-shell-browse {
+    display: none !important;
+  }
+  .kaboo-web-browse {
+    display: block !important;
+  }
+}
+
+/* Touch-primary phones: allow app shell browse when JS enables it */
+@media (hover: none), (pointer: coarse) {
+  html.kaboo-app-shell .kaboo-web-browse {
+    display: none !important;
+  }
+  html.kaboo-app-shell .kaboo-shell-browse {
+    display: block !important;
+  }
+}
+
+/* Installed PWA (no browser chrome): keep shell even on iPad with pencil */
+@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+  .kaboo-web-browse {
+    display: none !important;
+  }
+  .kaboo-shell-browse {
+    display: block !important;
+  }
+  .app-bottom-nav {
+    display: flex !important;
+  }
+}
+
+@media (display-mode: standalone) {
+  body {
+    overscroll-behavior-y: none;
+    background: #fff;
+  }
+
+  .app-top-bar {
+    border-bottom-color: rgba(0, 0, 0, 0.06);
+    box-shadow: none;
+  }
+
+  .app-bottom-nav {
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.1);
   }
 }
 

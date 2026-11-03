@@ -47,7 +47,10 @@ export const login = async (req: Request, res: Response) => {
     }
 
     if (user.role === 'PENDING') {
-      return res.status(403).json({ error: 'This account is not active yet. Contact your administrator.' });
+      return res.status(403).json({
+        error: 'Your registration is pending approval by an administrator. You will be able to log in once approved.',
+        code: 'PENDING_APPROVAL',
+      });
     }
     if (user.role !== 'SUPER_ADMIN' && user.role !== 'AGENT') {
       return res.status(403).json({ error: 'Sign-in is not available for this account.' });
@@ -151,6 +154,59 @@ export const changeMyPin = async (req: AuthRequest, res: Response) => {
     logInfo('change_pin_success', { ...baseLog, userId });
 
     return res.json({ success: true, message: 'PIN changed successfully' });
+  } catch (error: unknown) {
+    sendServerError(res, error, baseLog);
+  }
+};
+
+/** POST /api/auth/register — public self-signup for agents */
+export const register = async (req: Request, res: Response) => {
+  const baseLog = { flow: 'register', ...getHttpRequestMeta(req) };
+  try {
+    const {
+      mobileNumber, firstName, lastName, pin,
+      email, agencyName, licenseNumber, officePhone, whatsappNumber,
+    } = req.body ?? {};
+
+    const cleaned = normalizeNzMobile(String(mobileNumber ?? ''));
+    if (!isValidNzMobile(cleaned)) {
+      return res.status(400).json({ error: 'Invalid mobile number. Please enter a valid NZ mobile number.' });
+    }
+    if (!String(firstName ?? '').trim()) return res.status(400).json({ error: 'First name is required.' });
+    if (!String(lastName ?? '').trim())  return res.status(400).json({ error: 'Last name is required.' });
+
+    const pinStr = String(pin ?? '').trim();
+    if (!/^\d{6}$/.test(pinStr)) {
+      return res.status(400).json({ error: 'PIN must be exactly 6 digits.' });
+    }
+
+    const existing = await prisma.user.findUnique({ where: { mobileNumber: cleaned } });
+    if (existing) {
+      return res.status(409).json({ error: 'An account with this mobile number already exists.' });
+    }
+
+    const user = await prisma.user.create({
+      data: {
+        mobileNumber:  cleaned,
+        firstName:     String(firstName).trim(),
+        lastName:      String(lastName).trim(),
+        pin:           pinStr,
+        role:          'PENDING',
+        isActive:      true,
+        email:         email ? String(email).trim() || null : null,
+        agencyName:    agencyName ? String(agencyName).trim() || null : null,
+        licenseNumber:   licenseNumber ? String(licenseNumber).trim() || null : null,
+        officePhone:     officePhone ? String(officePhone).trim() || null : null,
+        whatsappNumber:  whatsappNumber ? String(whatsappNumber).trim() || null : null,
+      },
+    });
+
+    logInfo('agent_registered', { ...baseLog, userId: user.id });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Registration submitted. You can log in once an administrator approves your account.',
+    });
   } catch (error: unknown) {
     sendServerError(res, error, baseLog);
   }

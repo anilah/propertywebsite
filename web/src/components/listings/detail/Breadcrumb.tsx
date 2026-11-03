@@ -12,16 +12,18 @@ function titleCase(s: string): string {
 
 export function Breadcrumb({ listing }: { listing: Listing }) {
   const search = searchPath(listing.listingType);
-  const typeLabel = listing.listingType === 'SALE' ? 'Sale' : 'Rent';
+  const typeLabel =
+    listing.listingType === 'SALE' ? 'Sale' : listing.listingType === 'FLATMATES' ? 'Flatmates' : 'Rent';
+  const loc = listing.location ?? { region: '', district: '', suburb: '' };
   const crumbs: { label: string; to?: string }[] = [
     { label: 'Home', to: '/' },
     { label: 'Property', to: search },
     { label: 'Residential', to: search },
     { label: typeLabel, to: search },
-    { label: titleCase(listing.location.region), to: search },
-    { label: titleCase(listing.location.district), to: search },
-    { label: titleCase(listing.location.suburb) },
-  ];
+    { label: titleCase(loc.region ?? ''), to: search },
+    { label: titleCase(loc.district ?? ''), to: search },
+    { label: titleCase(loc.suburb ?? '') },
+  ].filter((c) => c.label.trim() !== '');
 
   return (
     <nav aria-label="Breadcrumb" className="text-sm text-primary-600">

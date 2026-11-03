@@ -1,6 +1,13 @@
-backend/.env
-backend/.env
-backend/.env
-backend/.env.local
-*.env
-*.env.local
+# Environment files - never commit secrets
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Keep safe example/template files
+!.env.example
+!**/.env.example
+
+# Serverless generated files
+.serverless/
+**/.serverless/

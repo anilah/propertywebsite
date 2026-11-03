@@ -1,9 +1,25 @@
-import { useState, useRef, useCallback, useEffect, type Dispatch, type SetStateAction } from 'react';
+import {
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+  lazy,
+  Suspense,
+  type Dispatch,
+  type SetStateAction,
+  type DragEvent,
+} from 'react';
 import { Input } from '../ui/Input';
 import { ImageUpload } from '../ui/ImageUpload';
 import { FormSection } from './FormSection';
 import type { Listing, ListingMediaKind } from '../../types';
-import { uploadApi, type UploadConfig } from '../../services/api';
+import { uploadApi, geocodeApi, type UploadConfig, type GeocodeCandidate } from '../../services/api';
+import { ListingMarketingSection } from './ListingMarketingSection';
+import { listingDetailPath } from '../../utils/listingRoutes';
+
+const CoordinatePickerMap = lazy(() =>
+  import('./CoordinatePickerMap').then((m) => ({ default: m.CoordinatePickerMap }))
+);
 
 const mediaKinds: { value: ListingMediaKind; label: string }[] = [
   { value: 'PHOTO', label: 'Photo' },
@@ -15,7 +31,7 @@ const mediaKinds: { value: ListingMediaKind; label: string }[] = [
 ];
 
 // Emoji icons so users can visually identify each category at a glance
-const kindIcon: Record<ListingMediaKind, string> = {
+const kindIcon: Partial<Record<ListingMediaKind, string>> = {
   PHOTO:     '📷',
   EXTERIOR:  '🏡',
   INTERIOR:  '🛋️',
@@ -25,7 +41,7 @@ const kindIcon: Record<ListingMediaKind, string> = {
 };
 
 // Colour scheme: card border, legend badge, select background
-const kindBorderClass: Record<ListingMediaKind, string> = {
+const kindBorderClass: Partial<Record<ListingMediaKind, string>> = {
   PHOTO:     'border-blue-300',
   EXTERIOR:  'border-emerald-400',
   INTERIOR:  'border-violet-400',
@@ -34,7 +50,7 @@ const kindBorderClass: Record<ListingMediaKind, string> = {
   OTHER:     'border-slate-300',
 };
 
-const kindBadgeClass: Record<ListingMediaKind, string> = {
+const kindBadgeClass: Partial<Record<ListingMediaKind, string>> = {
   PHOTO:     'bg-blue-100 text-blue-700',
   EXTERIOR:  'bg-emerald-100 text-emerald-700',
   INTERIOR:  'bg-violet-100 text-violet-700',
@@ -43,7 +59,7 @@ const kindBadgeClass: Record<ListingMediaKind, string> = {
   OTHER:     'bg-slate-100 text-slate-600',
 };
 
-const kindSelectClass: Record<ListingMediaKind, string> = {
+const kindSelectClass: Partial<Record<ListingMediaKind, string>> = {
   PHOTO:     'bg-blue-50 text-blue-700',
   EXTERIOR:  'bg-emerald-50 text-emerald-700',
   INTERIOR:  'bg-violet-50 text-violet-700',
@@ -64,6 +80,161 @@ const addLink =
 export interface MediaRow {
   url: string;
   kind: ListingMediaKind;
+}
+
+// ── Drag-to-reorder photo grid ─────────────────────────────────────────────────
+function MediaGrid({
+  mediaItems,
+  setMediaItems,
+}: {
+  mediaItems: MediaRow[];
+  setMediaItems: Dispatch<SetStateAction<MediaRow[]>>;
+}) {
+  const dragIndex = useRef<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
+
+  const move = (from: number, to: number) => {
+    if (from === to) return;
+    setMediaItems((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+  };
+
+  const onDragStart = (e: DragEvent<HTMLDivElement>, index: number) => {
+    dragIndex.current = index;
+    e.dataTransfer.effectAllowed = 'move';
+    // Tiny delay so the browser snapshot looks normal
+    setTimeout(() => {
+      const el = e.currentTarget as HTMLDivElement;
+      el.style.opacity = '0.4';
+    }, 0);
+  };
+
+  const onDragEnd = (e: DragEvent<HTMLDivElement>) => {
+    (e.currentTarget as HTMLDivElement).style.opacity = '1';
+    setDragOver(null);
+    dragIndex.current = null;
+  };
+
+  const onDragOver = (e: DragEvent<HTMLDivElement>, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOver(index);
+  };
+
+  const onDrop = (e: DragEvent<HTMLDivElement>, index: number) => {
+    e.preventDefault();
+    if (dragIndex.current !== null) move(dragIndex.current, index);
+    setDragOver(null);
+  };
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+      {mediaItems.map((row, index) => (
+        <div
+          key={row.url + index}
+          draggable
+          onDragStart={(e) => onDragStart(e, index)}
+          onDragEnd={onDragEnd}
+          onDragOver={(e) => onDragOver(e, index)}
+          onDrop={(e) => onDrop(e, index)}
+          className={[
+            'relative group rounded-xl overflow-hidden border-2 transition-all bg-slate-100 cursor-grab active:cursor-grabbing',
+            kindBorderClass[row.kind],
+            dragOver === index && dragIndex.current !== index
+              ? 'ring-2 ring-teal-400 ring-offset-1 scale-[1.03]'
+              : '',
+          ].join(' ')}
+        >
+          {/* Thumbnail */}
+          <div className="aspect-video w-full overflow-hidden">
+            <img
+              src={row.url}
+              alt={`Photo ${index + 1}`}
+              className="w-full h-full object-cover pointer-events-none"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src =
+                  'https://placehold.co/400x300/e2e8f0/94a3b8?text=No+Preview';
+              }}
+            />
+          </div>
+
+          {/* Position label */}
+          <div className="absolute top-2 left-2 text-[10px] font-bold bg-black/55 text-white px-1.5 py-0.5 rounded leading-none select-none">
+            {index === 0 ? '★ Cover' : `#${index + 1}`}
+          </div>
+
+          {/* Remove */}
+          <button
+            type="button"
+            onClick={() => setMediaItems((prev) => prev.filter((_, i) => i !== index))}
+            className="absolute top-2 right-2 bg-red-500/90 hover:bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow"
+            aria-label="Remove photo"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          {/* ← → reorder arrows (always visible on touch/mobile) */}
+          <div className="absolute bottom-10 inset-x-0 flex justify-between px-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto">
+            <button
+              type="button"
+              onClick={() => move(index, index - 1)}
+              disabled={index === 0}
+              className="bg-black/60 hover:bg-black/80 text-white rounded-full p-1 disabled:opacity-0 transition-opacity"
+              aria-label="Move left"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => move(index, index + 1)}
+              disabled={index === mediaItems.length - 1}
+              className="bg-black/60 hover:bg-black/80 text-white rounded-full p-1 disabled:opacity-0 transition-opacity"
+              aria-label="Move right"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Category selector */}
+          <div className="px-2 pb-2 pt-1.5">
+            <label className="mb-0.5 block text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+              Category
+            </label>
+            <div className="relative">
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] pointer-events-none">
+                {kindIcon[row.kind]}
+              </span>
+              <select
+                value={row.kind}
+                onChange={(e) => {
+                  const kind = e.target.value as ListingMediaKind;
+                  setMediaItems((prev) => prev.map((r, i) => (i === index ? { ...r, kind } : r)));
+                }}
+                className={`w-full appearance-none rounded-lg pl-6 pr-6 py-1.5 text-xs font-semibold border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-400 ${kindSelectClass[row.kind]}`}
+              >
+                {mediaKinds.map((k) => (
+                  <option key={k.value} value={k.value}>{k.label}</option>
+                ))}
+              </select>
+              <svg className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export interface UpdateRow {
@@ -271,6 +442,141 @@ function VideoUpload({ videoUrl, onChange }: VideoUploadProps) {
   );
 }
 
+/** OSM Nominatim rejects marketing labels like "Auckland City" — prefer hierarchy fields. */
+function streetLineOnly(streetAddress?: string): string {
+  const raw = (streetAddress || '').trim();
+  if (!raw) return '';
+  // Users often paste a full geocode label into Street address — use only the road line.
+  return raw.split(',')[0]?.trim() || raw;
+}
+
+function buildGeocodeQuery(formData: Partial<Listing>): string {
+  const street = streetLineOnly(formData.streetAddress) || formData.streetAddress?.trim() || '';
+  const cityLabel = formData.city?.trim().replace(/\s+City$/i, '') || undefined;
+  const district = formData.location?.district?.trim().replace(/\s+City$/i, '') || undefined;
+  const parts = [
+    street,
+    formData.location?.suburb,
+    district,
+    // Only use city label when suburb/district aren't set (avoid "Auckland City" noise).
+    !formData.location?.suburb && !formData.location?.district ? cityLabel : undefined,
+    formData.location?.region,
+    'New Zealand',
+  ]
+    .map((p) => p?.trim())
+    .filter((p): p is string => Boolean(p));
+
+  // Drop parts already present in earlier segments (street may still include suburb text).
+  const out: string[] = [];
+  for (const part of parts) {
+    const hay = out.join(', ').toLowerCase();
+    if (hay.includes(part.toLowerCase())) continue;
+    out.push(part);
+  }
+  return out.join(', ');
+}
+
+interface FindCoordinatesProps {
+  formData: Partial<Listing>;
+  updateField: (field: keyof Listing, value: unknown) => void;
+}
+
+function FindPinFromAddress({ formData, updateField }: FindCoordinatesProps) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<GeocodeCandidate[] | null>(null);
+  const [appliedLabel, setAppliedLabel] = useState<string | null>(null);
+
+  const query = buildGeocodeQuery(formData);
+  const canSearch = Boolean(formData.streetAddress?.trim());
+
+  const handleSearch = async () => {
+    if (!canSearch) {
+      setError('Enter a street address first. Selecting suburb/region above also helps.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setCandidates(null);
+    setAppliedLabel(null);
+    try {
+      const res = await geocodeApi.search(query);
+      if (res.status !== 'ok' || res.candidates.length === 0) {
+        setError(
+          res.message ||
+            'No match found. Check the street address and region/suburb above, or drop a pin on the map.'
+        );
+        return;
+      }
+      setCandidates(res.candidates);
+      const top = res.candidates[0];
+      updateField('latitude', top.lat);
+      updateField('longitude', top.lng);
+      setAppliedLabel(top.label);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not reach the geocoding service.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const applyCandidate = (c: GeocodeCandidate) => {
+    updateField('latitude', c.lat);
+    updateField('longitude', c.lng);
+    setAppliedLabel(c.label);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={handleSearch}
+          disabled={loading || !canSearch}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          {loading ? 'Finding pin…' : 'Find pin from address'}
+        </button>
+        <p className="text-xs text-slate-500">
+          Or click the map below to place the pin yourself.
+        </p>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      {appliedLabel && (
+        <p className="text-sm text-emerald-700">
+          ✓ Pin set from: <span className="font-medium">{appliedLabel}</span>
+        </p>
+      )}
+
+      {candidates && candidates.length > 1 && (
+        <div className="space-y-1">
+          <p className="text-xs text-slate-500">Not right? Pick another match:</p>
+          {candidates.map((c, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => applyCandidate(c)}
+              className={`block w-full text-left rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                appliedLabel === c.label
+                  ? 'border-primary-300 bg-primary-50 text-primary-700'
+                  : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ListingFormExtras({
   formData,
   updateField,
@@ -287,56 +593,90 @@ export function ListingFormExtras({
     <div className="space-y-6">
       <FormSection
         title="Street address & map"
-        subtitle="Shown on the listing detail page. Coordinates help if you want map pins without geocoding."
+        subtitle="Set the property pin for the public map, school zones, and land lookups. Street View and Google Maps links on the listing are generated from this pin automatically."
       >
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Input
-            label="Street address"
-            value={formData.streetAddress || ''}
-            onChange={(e) => updateField('streetAddress', e.target.value)}
-            placeholder="121 West Tamaki Road"
-          />
-          <Input
-            label="City / area label"
-            value={formData.city || ''}
-            onChange={(e) => updateField('city', e.target.value)}
-            placeholder="Auckland City"
-          />
-          <Input
-            label="Postcode"
-            value={formData.postalCode || ''}
-            onChange={(e) => updateField('postalCode', e.target.value)}
-          />
-          <Input
-            label="Latitude"
-            type="number"
-            step="any"
-            value={formData.latitude ?? ''}
-            onChange={(e) =>
-              updateField('latitude', e.target.value === '' ? undefined : Number(e.target.value))
-            }
-          />
-          <Input
-            label="Longitude"
-            type="number"
-            step="any"
-            value={formData.longitude ?? ''}
-            onChange={(e) =>
-              updateField('longitude', e.target.value === '' ? undefined : Number(e.target.value))
-            }
-          />
-          <Input
-            label="Street View URL"
-            value={formData.streetViewUrl || ''}
-            onChange={(e) => updateField('streetViewUrl', e.target.value)}
-            placeholder="https://..."
-          />
-          <Input
-            label="Google Maps URL"
-            value={formData.googleMapsUrl || ''}
-            onChange={(e) => updateField('googleMapsUrl', e.target.value)}
-            placeholder="https://maps.google.com/..."
-          />
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <Input
+                label="Street address"
+                value={formData.streetAddress || ''}
+                onChange={(e) => updateField('streetAddress', e.target.value)}
+                placeholder="7C Maxwell Avenue"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Street and number only — suburb/region are chosen above. Avoid pasting the full address.
+              </p>
+            </div>
+            <Input
+              label="City / area label"
+              value={formData.city || ''}
+              onChange={(e) => updateField('city', e.target.value)}
+              placeholder="Auckland"
+            />
+            <Input
+              label="Postcode"
+              value={formData.postalCode || ''}
+              onChange={(e) => updateField('postalCode', e.target.value)}
+            />
+          </div>
+
+          <FindPinFromAddress formData={formData} updateField={updateField} />
+
+          <div>
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+              <label className="text-sm font-medium text-slate-700">Map pin</label>
+              {typeof formData.latitude === 'number' && typeof formData.longitude === 'number' ? (
+                <span className="text-xs text-slate-500">
+                  {formData.latitude.toFixed(5)}, {formData.longitude.toFixed(5)}
+                </span>
+              ) : (
+                <span className="text-xs text-amber-700">No pin yet — find from address or click the map</span>
+              )}
+            </div>
+            <Suspense
+              fallback={
+                <div className="h-72 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center text-sm text-slate-500">
+                  Loading map…
+                </div>
+              }
+            >
+              <CoordinatePickerMap
+                latitude={formData.latitude}
+                longitude={formData.longitude}
+                onChange={(lat, lng) => {
+                  updateField('latitude', Number(lat.toFixed(6)));
+                  updateField('longitude', Number(lng.toFixed(6)));
+                }}
+              />
+            </Suspense>
+          </div>
+
+          <details className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2">
+            <summary className="cursor-pointer text-sm font-medium text-slate-600 select-none">
+              Adjust coordinates manually
+            </summary>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Input
+                label="Latitude"
+                type="number"
+                step="any"
+                value={formData.latitude ?? ''}
+                onChange={(e) =>
+                  updateField('latitude', e.target.value === '' ? undefined : Number(e.target.value))
+                }
+              />
+              <Input
+                label="Longitude"
+                type="number"
+                step="any"
+                value={formData.longitude ?? ''}
+                onChange={(e) =>
+                  updateField('longitude', e.target.value === '' ? undefined : Number(e.target.value))
+                }
+              />
+            </div>
+          </details>
         </div>
       </FormSection>
 
@@ -393,92 +733,11 @@ export function ListingFormExtras({
             placeholder="#5489662819"
           />
           <Input
-            label="Total units (development)"
-            type="number"
-            min={0}
-            value={formData.totalUnits ?? ''}
-            onChange={(e) =>
-              updateField('totalUnits', e.target.value === '' ? undefined : Number(e.target.value))
-            }
-          />
-          <Input
-            label="Sold units"
-            type="number"
-            min={0}
-            value={formData.soldUnits ?? ''}
-            onChange={(e) =>
-              updateField('soldUnits', e.target.value === '' ? undefined : Number(e.target.value))
-            }
-          />
-          <Input
-            label="Remaining units"
-            type="number"
-            min={0}
-            value={formData.remainingUnits ?? ''}
-            onChange={(e) =>
-              updateField('remainingUnits', e.target.value === '' ? undefined : Number(e.target.value))
-            }
-          />
-          <Input
             label="Expected completion"
             value={formData.expectedCompletion || ''}
             onChange={(e) => updateField('expectedCompletion', e.target.value)}
             placeholder="June 2026"
           />
-          <Input
-            label="Builder"
-            value={formData.builderName || ''}
-            onChange={(e) => updateField('builderName', e.target.value)}
-          />
-          <Input
-            label="School zone"
-            value={formData.schoolZone || ''}
-            onChange={(e) => updateField('schoolZone', e.target.value)}
-            placeholder="Glendowie College"
-          />
-          <div className="md:col-span-2">
-            <label className="mb-2 block text-sm font-medium text-slate-700">Warranty / guarantees</label>
-            <textarea className={tx} rows={2} value={formData.warrantyInfo || ''} onChange={(e) => updateField('warrantyInfo', e.target.value)} />
-          </div>
-          <div className="md:col-span-2">
-            <label className="mb-2 block text-sm font-medium text-slate-700">Amenities nearby</label>
-            <textarea
-              className={tx}
-              rows={2}
-              value={formData.amenitiesNearby || ''}
-              onChange={(e) => updateField('amenitiesNearby', e.target.value)}
-              placeholder="Bays' beaches, cafés, Glen Innes train station"
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="mb-2 block text-sm font-medium text-slate-700">Interior highlights</label>
-            <textarea
-              className={tx}
-              rows={2}
-              value={formData.interiorHighlights || ''}
-              onChange={(e) => updateField('interiorHighlights', e.target.value)}
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="mb-2 block text-sm font-medium text-slate-700">Layout options</label>
-            <textarea
-              className={tx}
-              rows={2}
-              value={formData.layoutOptions || ''}
-              onChange={(e) => updateField('layoutOptions', e.target.value)}
-              placeholder="3-bedroom 2.5-bathroom, 3-bedroom 2-bathroom"
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="mb-2 block text-sm font-medium text-slate-700">Open homes note</label>
-            <textarea
-              className={tx}
-              rows={2}
-              value={formData.openHomesNote || ''}
-              onChange={(e) => updateField('openHomesNote', e.target.value)}
-              placeholder="No times scheduled — contact agent to view"
-            />
-          </div>
         </div>
       </FormSection>
 
@@ -510,73 +769,18 @@ export function ListingFormExtras({
               </span>
             </div>
 
-            {/* Thumbnail grid with inline category selector */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {mediaItems.map((row, index) => (
-                <div
-                  key={index}
-                  className={`relative group rounded-xl overflow-hidden border-2 transition-colors bg-slate-100 ${kindBorderClass[row.kind]}`}
-                >
-                  {/* Thumbnail */}
-                  <div className="aspect-video w-full overflow-hidden">
-                    <img
-                      src={row.url}
-                      alt={`Photo ${index + 1}`}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src =
-                          'https://placehold.co/400x300/e2e8f0/94a3b8?text=No+Preview';
-                      }}
-                    />
-                  </div>
+            {/* Reorder hint */}
+            {mediaItems.length > 1 && (
+              <p className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4M8 15l4 4 4-4" />
+                </svg>
+                Drag photos to reorder · first photo is the cover
+              </p>
+            )}
 
-                  {/* Position label */}
-                  <div className="absolute top-2 left-2 text-[10px] font-bold bg-black/55 text-white px-1.5 py-0.5 rounded leading-none">
-                    {index === 0 ? '★ Cover' : `#${index + 1}`}
-                  </div>
-
-                  {/* Remove */}
-                  <button
-                    type="button"
-                    onClick={() => setMediaItems((prev) => prev.filter((_, i) => i !== index))}
-                    className="absolute top-2 right-2 bg-red-500/90 hover:bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow"
-                    aria-label="Remove photo"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-
-                  {/* Category selector — full-width native select, visually styled */}
-                  <div className="px-2 pb-2 pt-1.5">
-                    <label className="mb-0.5 block text-[9px] font-semibold uppercase tracking-wider text-slate-400">
-                      Category
-                    </label>
-                    <div className="relative">
-                      <span className={`absolute left-2 top-1/2 -translate-y-1/2 text-[11px] pointer-events-none`}>
-                        {kindIcon[row.kind]}
-                      </span>
-                      <select
-                        value={row.kind}
-                        onChange={(e) => {
-                          const kind = e.target.value as ListingMediaKind;
-                          setMediaItems((prev) => prev.map((r, i) => (i === index ? { ...r, kind } : r)));
-                        }}
-                        className={`w-full appearance-none rounded-lg pl-6 pr-6 py-1.5 text-xs font-semibold border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-400 ${kindSelectClass[row.kind]}`}
-                      >
-                        {mediaKinds.map((k) => (
-                          <option key={k.value} value={k.value}>{k.label}</option>
-                        ))}
-                      </select>
-                      {/* chevron */}
-                      <svg className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {/* Thumbnail grid with drag-to-reorder */}
+            <MediaGrid mediaItems={mediaItems} setMediaItems={setMediaItems} />
           </div>
         )}
       </FormSection>
@@ -627,7 +831,10 @@ export function ListingFormExtras({
         </div>
       </FormSection>
 
-      <FormSection title="Open home times" subtitle="Buyers see these on the listing when set.">
+      <FormSection
+        title="Open home times"
+        subtitle="Scheduled times appear on the public listing. If none are set, buyers see the note below instead."
+      >
         {openHomeItems.map((row, index) => (
           <div
             key={index}
@@ -692,7 +899,41 @@ export function ListingFormExtras({
             </button>
           )}
         </div>
+        <div className="mt-4">
+          <label className="mb-2 block text-sm font-medium text-slate-700">
+            Note when no times are listed
+          </label>
+          <textarea
+            className={tx}
+            rows={2}
+            value={formData.openHomesNote || ''}
+            onChange={(e) => updateField('openHomesNote', e.target.value)}
+            placeholder="No times scheduled — contact agent to view"
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Shown on the public page only when there are no scheduled open homes above. Clear this if you remove times and do not want leftover text.
+          </p>
+        </div>
       </FormSection>
+
+      <div id="form-marketing" className="scroll-mt-[11rem] sm:scroll-mt-[11.5rem]">
+        <ListingMarketingSection
+          listingId={formData.id}
+          marketingCopy={formData.marketingCopy || ''}
+          marketingLink={formData.marketingLink || ''}
+          defaultPropertyLink={
+            formData.id && formData.listingType && formData.location
+              ? `${typeof window !== 'undefined' ? window.location.origin : 'https://kaboohomes.com'}${listingDetailPath(
+                  formData.listingType,
+                  formData.id,
+                  formData.location
+                )}`
+              : ''
+          }
+          onChangeCopy={(v) => updateField('marketingCopy', v)}
+          onChangeLink={(v) => updateField('marketingLink', v)}
+        />
+      </div>
 
       <FormSection
         title="Property files"

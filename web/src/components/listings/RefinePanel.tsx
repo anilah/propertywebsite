@@ -76,7 +76,8 @@ function Minus() {
 }
 
 export function RefinePanel({ filters, total, onApply, onClose }: RefinePanelProps) {
-  const ref = useRef<HTMLDivElement>(null);
+  const mobileRef = useRef<HTMLDivElement>(null);
+  const desktopRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState<Section | null>(null);
 
   // local draft state — only commit on "View results"
@@ -91,16 +92,19 @@ export function RefinePanel({ filters, total, onApply, onClose }: RefinePanelPro
     minParking: filters.minParking,
   });
 
-  const isRent = filters.listingType === "RENT";
+  const isRent = filters.listingType === "RENT" || filters.listingType === "FLATMATES";
   const PRICE_OPTIONS = isRent ? RENT_PRICE_OPTIONS : SALE_PRICE_OPTIONS;
   const priceLabel = isRent ? "Weekly rent" : "Price";
 
   const toggle = (s: Section) => setOpen((o) => (o === s ? null : s));
 
-  // Close on outside click
+  // Close on outside click (backdrop is outside mobileRef — both paths close)
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      const target = e.target as Node;
+      const inMobile = mobileRef.current?.contains(target);
+      const inDesktop = desktopRef.current?.contains(target);
+      if (!inMobile && !inDesktop) onClose();
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -153,21 +157,8 @@ export function RefinePanel({ filters, total, onApply, onClose }: RefinePanelPro
     </div>
   );
 
-  return (
-    <div
-      ref={ref}
-      className="absolute left-0 top-full mt-2 w-[420px] max-w-[95vw] bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden"
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-        <h2 className="text-xl font-bold text-gray-900">Refine search</h2>
-        <button onClick={onClose} className="p-1 rounded hover:bg-gray-100 transition-colors">
-          <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-
+  const panelBody = (
+    <>
       {/* Location */}
       <SectionRow id="location" label="Location" icon={<ChevronRight />}
         summary={draft.region ? [draft.region, draft.district, draft.suburb].filter(Boolean).join(", ") : undefined}>
@@ -302,6 +293,47 @@ export function RefinePanel({ filters, total, onApply, onClose }: RefinePanelPro
           View {total.toLocaleString()} results
         </button>
       </div>
-    </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile: bottom sheet + backdrop */}
+      <div className="sm:hidden fixed inset-0 z-50">
+        <button type="button" className="absolute inset-0 bg-black/40" aria-label="Close refine" onClick={onClose} />
+        <div
+          ref={mobileRef}
+          className="absolute inset-x-0 bottom-0 max-h-[85vh] bg-white rounded-t-2xl shadow-2xl overflow-hidden flex flex-col animate-sheet-up pb-safe"
+        >
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+            <h2 className="text-lg font-bold text-gray-900">Refine search</h2>
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition-colors" aria-label="Close">
+              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {panelBody}
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop / tablet: anchored dropdown */}
+      <div
+        ref={desktopRef}
+        className="hidden sm:block absolute left-0 top-full mt-2 w-[420px] max-w-[95vw] bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden"
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="text-xl font-bold text-gray-900">Refine search</h2>
+          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100 transition-colors">
+            <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        {panelBody}
+      </div>
+    </>
   );
 }

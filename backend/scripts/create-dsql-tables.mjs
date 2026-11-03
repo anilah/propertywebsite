@@ -18,12 +18,17 @@
  */
 import { config } from 'dotenv';
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 config({ path: resolve(root, '.env') });
+const prodEnv = resolve(root, '.env.production');
+if (existsSync(prodEnv)) config({ path: prodEnv, override: true });
+const prodProdEnv = resolve(root, '.env.production.prod');
+if (existsSync(prodProdEnv)) config({ path: prodProdEnv, override: true });
 
 const host = process.env.AURORA_DSQL_HOST?.trim();
 const region =
@@ -208,6 +213,33 @@ const statements = [
     verified       BOOLEAN     NOT NULL DEFAULT false,
     "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT now()
   )`,
+
+  // ── tradies ───────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS tradies (
+    id               TEXT        PRIMARY KEY,
+    slug             TEXT        NOT NULL UNIQUE,
+    "businessName"   TEXT        NOT NULL,
+    "contactName"    TEXT,
+    categories       TEXT        NOT NULL DEFAULT '[]',
+    skills           TEXT        NOT NULL DEFAULT '[]',
+    description      TEXT,
+    phone            TEXT        NOT NULL,
+    "whatsappNumber" TEXT,
+    email            TEXT,
+    website          TEXT,
+    "photoUrl"       TEXT,
+    "licenseNumber"  TEXT,
+    region           TEXT,
+    district         TEXT,
+    suburbs          TEXT        NOT NULL DEFAULT '[]',
+    "isActive"       BOOLEAN     NOT NULL DEFAULT true,
+    featured         BOOLEAN     NOT NULL DEFAULT false,
+    "callClicks"     INTEGER     NOT NULL DEFAULT 0,
+    "whatsappClicks" INTEGER     NOT NULL DEFAULT 0,
+    "createdBy"      TEXT,
+    "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    "updatedAt"      TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
 ];
 
 for (const sql of statements) {
@@ -267,6 +299,26 @@ for (const sql of listingColumnAlters) {
   }
 }
 console.log('✔  listings (videoUrl column alter)');
+
+// enquiries: lead-source attribution (tracked links from social posts)
+const enquiryColumnAlters = [
+  `ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS "emailAudit" TEXT`,
+  `ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS source TEXT`,
+  `ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS "utmMedium" TEXT`,
+  `ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS "utmCampaign" TEXT`,
+  `ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS "campaignId" TEXT`,
+  `ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS referrer TEXT`,
+];
+for (const sql of enquiryColumnAlters) {
+  try {
+    await client.query(sql);
+  } catch (e) {
+    console.error(`✘  enquiries alter: ${e.message}`);
+    await client.end();
+    process.exit(1);
+  }
+}
+console.log('✔  enquiries (lead source column alters)');
 
 await client.end();
 console.log('\nAll tables created. Next step: npm run db:indexes:dsql');

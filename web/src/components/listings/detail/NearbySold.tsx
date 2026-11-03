@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Listing } from '../../../types';
 import { listingsApi } from '../../../services/api';
 import { BetaBadge } from './BetaBadge';
-import { formatSalePrice, formatRent } from '../../../utils/format';
+import { formatSalePrice, formatRent, formatListingLocationLine } from '../../../utils/format';
 
 function hash(str: string): number {
   let h = 0;
@@ -101,8 +101,7 @@ export function NearbySold({ listing }: { listing: Listing }) {
                 <div className="p-3">
                   <p className="text-sm text-red-600 font-medium">Sold: {soldDate(n, i)}</p>
                   <p className="text-sm text-gray-800 mt-1 line-clamp-2">
-                    {n.streetAddress ? `${n.streetAddress}, ` : ''}
-                    {n.location.suburb}, {n.location.district}
+                    {formatListingLocationLine(n) || [n.location?.suburb, n.location?.district].filter(Boolean).join(', ')}
                   </p>
                   <div className="flex items-center gap-3 text-xs text-gray-500 mt-2">
                     {n.bedrooms > 0 && <span>🛏 {n.bedrooms}</span>}

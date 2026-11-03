@@ -1,13 +1,16 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useApiAuthStore } from '../../store/apiAuthStore';
 import { useApiListingsStore } from '../../store/apiListingsStore';
 import { listingsApi } from '../../services/api';
 import type { Listing } from '../../types';
-import { formatSalePrice, formatRent } from '../../utils/format';
+import { formatSalePrice, formatRent, formatListingLocationLine } from '../../utils/format';
+import { listingCoverImage } from '../../utils/listingImages';
+import { openListingPublicPage } from '../../utils/listingRoutes';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Card } from '../../components/ui/Card';
+import { AppToast, type AppToastState } from '../../components/ui/AppToast';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -118,18 +121,20 @@ function PendingCard({ listing, onApproved }: { listing: Listing; onApproved: ()
   const approve = async () => {
     setApproving(true);
     try {
-      await listingsApi.updateListing(listing.id, { status: 'published' });
+      await listingsApi.approveListingPublish(listing.id);
       onApproved();
     } catch { /* ignore */ }
     finally { setApproving(false); }
   };
 
+  const cover = listingCoverImage(listing);
+
   return (
     <div className="flex gap-4 rounded-xl border border-amber-200/70 bg-amber-50/60 p-4 transition hover:border-amber-300 hover:bg-amber-50">
       {/* Thumbnail */}
       <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-lg bg-slate-200">
-        {listing.images?.[0] ? (
-          <img src={listing.images[0]} alt={listing.headline} className="h-full w-full object-cover" />
+        {cover ? (
+          <img src={cover} alt={listing.headline} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-slate-300">
             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -144,7 +149,7 @@ function PendingCard({ listing, onApproved }: { listing: Listing; onApproved: ()
       <div className="min-w-0 flex-1">
         <p className="truncate font-semibold leading-snug text-slate-900">{listing.headline}</p>
         <p className="mt-0.5 truncate text-xs text-slate-500">
-          {listing.location.suburb}, {listing.location.district}
+          {formatListingLocationLine(listing) || 'Address not set'}
         </p>
         {owner && ownerName && (
           <div className="mt-1.5 flex items-center gap-1.5">
@@ -171,13 +176,21 @@ function PendingCard({ listing, onApproved }: { listing: Listing; onApproved: ()
           </button>
           <button
             type="button"
-            onClick={() => navigate(`/admin/listings/${listing.id}/edit`)}
+            onClick={() => openListingPublicPage(listing)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            title="Preview how this listing looks on the public site"
           >
             <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
+            Preview
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate(`/admin/listings/${listing.id}/edit`)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+          >
             Review
           </button>
         </div>
@@ -198,14 +211,15 @@ function ListingManagementCard({
   const { label, variant } = statusMeta(listing.status);
   const agent = listingAgentInfo(listing);
   const price = listing.listingType === 'SALE' ? formatSalePrice(listing) : formatRent(listing);
+  const cover = listingCoverImage(listing);
 
   return (
     <Card className="group flex h-full flex-col overflow-hidden border-slate-200/90 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
       {/* Image */}
       <div className="relative aspect-[16/10] overflow-hidden bg-slate-200">
-        {listing.images?.[0] ? (
+        {cover ? (
           <img
-            src={listing.images[0]}
+            src={cover}
             alt={listing.headline}
             className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
           />
@@ -261,7 +275,7 @@ function ListingManagementCard({
               d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          <span className="line-clamp-1">{listing.location.suburb}, {listing.location.district}</span>
+          <span className="line-clamp-1">{formatListingLocationLine(listing) || 'Address not set'}</span>
         </p>
 
         {/* Specs chips */}
@@ -276,15 +290,34 @@ function ListingManagementCard({
           )}
         </div>
 
-        <Link to={`/admin/listings/${listing.id}/edit`} className="mt-auto">
-          <Button variant="outline" size="md" className="w-full border-slate-200 hover:border-primary-300 hover:bg-primary-50/50">
-            <svg className="mr-2 inline h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        <div className="mt-auto flex flex-col gap-2 sm:flex-row">
+          <Button
+            variant="outline"
+            size="md"
+            className="w-full border-slate-200 hover:border-primary-300 hover:bg-primary-50/50 sm:flex-1"
+            onClick={() => openListingPublicPage(listing)}
+            title={
+              listing.status === 'draft' || listing.status === 'pending_approval'
+                ? 'Preview how this listing looks on the public site (not live yet)'
+                : 'Open the public listing page'
+            }
+          >
+            <svg className="mr-2 inline h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            Edit listing
+            {listing.status === 'draft' || listing.status === 'pending_approval' ? 'Preview' : 'View live'}
           </Button>
-        </Link>
+          <Link to={`/admin/listings/${listing.id}/edit`} className="sm:flex-1">
+            <Button variant="outline" size="md" className="w-full border-slate-200 hover:border-primary-300 hover:bg-primary-50/50">
+              <svg className="mr-2 inline h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Edit listing
+            </Button>
+          </Link>
+        </div>
       </div>
     </Card>
   );
@@ -296,14 +329,55 @@ type FilterTab = 'all' | 'draft' | 'pending_approval' | 'published' | 'off_marke
 
 export function AdminListingsPage() {
   const isSuperAdmin = useApiAuthStore((s) => s.isSuperAdmin);
+  const currentUserId = useApiAuthStore((s) => s.userId);
+  const location = useLocation();
+  const navigate = useNavigate();
   const { myListings, myListingsLoading, fetchMyListings } = useApiListingsStore();
   const [filter, setFilter] = useState<FilterTab>('all');
+  const [agentFilter, setAgentFilter] = useState<'all' | 'mine' | string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [toast, setToast] = useState<AppToastState>(null);
 
   useEffect(() => {
     fetchMyListings();
   }, [fetchMyListings]);
 
+  useEffect(() => {
+    const st = location.state as { submittedForReview?: boolean; publishedLive?: boolean } | null;
+    if (st?.submittedForReview) {
+      setToast({
+        tone: 'info',
+        title: 'Submitted for admin review',
+        message: 'Your listing is pending approval. An admin will publish it once reviewed.',
+      });
+      navigate(location.pathname, { replace: true, state: null });
+    } else if (st?.publishedLive) {
+      setToast({
+        tone: 'success',
+        title: 'Listing published',
+        message: 'The property is live on Kaboo Homes.',
+      });
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state, location.pathname, navigate]);
+
   const listings = myListings;
+
+  // Unique agents extracted from all listings (super admin only)
+  const agentOptions = useMemo(() => {
+    if (!isSuperAdmin) return [];
+    const seen = new Set<string>();
+    const agents: { id: string; name: string }[] = [];
+    listings.forEach((l) => {
+      const ownerId = l.createdBy;
+      if (!ownerId || seen.has(ownerId)) return;
+      seen.add(ownerId);
+      const owner = l.listingOwner;
+      const name = [owner?.firstName, owner?.lastName].filter(Boolean).join(' ') || owner?.mobileNumber || ownerId;
+      agents.push({ id: ownerId, name });
+    });
+    return agents.sort((a, b) => a.name.localeCompare(b.name));
+  }, [listings, isSuperAdmin]);
 
   const stats = useMemo(() => ({
     total:     listings.length,
@@ -319,13 +393,39 @@ export function AdminListingsPage() {
   );
 
   const filteredListings = useMemo(() => {
-    if (filter === 'all') return listings.filter((l) => l.status !== 'pending_approval');
-    if (filter === 'off_market') return listings.filter((l) => ['sold', 'rented', 'withdrawn'].includes(l.status));
-    return listings.filter((l) => l.status === filter);
-  }, [listings, filter]);
+    let result = listings;
+
+    // Status tab filter
+    if (filter === 'all') result = result.filter((l) => l.status !== 'pending_approval');
+    else if (filter === 'off_market') result = result.filter((l) => ['sold', 'rented', 'withdrawn'].includes(l.status));
+    else result = result.filter((l) => l.status === filter);
+
+    // Agent filter (super admin only)
+    if (isSuperAdmin) {
+      if (agentFilter === 'mine') {
+        result = result.filter((l) => l.createdBy === currentUserId);
+      } else if (agentFilter !== 'all') {
+        result = result.filter((l) => l.createdBy === agentFilter);
+      }
+    }
+
+    // Text search — headline or address
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((l) =>
+        l.headline?.toLowerCase().includes(q) ||
+        l.streetAddress?.toLowerCase().includes(q) ||
+        l.location?.suburb?.toLowerCase().includes(q) ||
+        l.location?.district?.toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  }, [listings, filter, agentFilter, searchQuery, isSuperAdmin, currentUserId]);
 
   const filterTabs: { id: FilterTab; label: string; count: number }[] = [
     { id: 'all',              label: 'All',         count: stats.total - stats.pending },
+    { id: 'pending_approval', label: 'Pending',     count: stats.pending },
     { id: 'draft',            label: 'Drafts',      count: stats.draft },
     { id: 'published',        label: 'Live',        count: stats.published },
     { id: 'off_market',       label: 'Off market',  count: stats.offMarket },
@@ -333,6 +433,7 @@ export function AdminListingsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-100/90 via-slate-50/40 to-white">
+      <AppToast toast={toast} onClose={() => setToast(null)} />
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
 
         {/* ── Page header ── */}
@@ -361,9 +462,12 @@ export function AdminListingsPage() {
         </div>
 
         {/* ── Stats row ── */}
-        <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
+        <div className={`mb-8 grid grid-cols-2 gap-3 lg:gap-4 ${isSuperAdmin ? 'sm:grid-cols-5' : 'sm:grid-cols-4'}`}>
           {[
             { label: 'Total',      value: stats.total,     accent: 'from-slate-700 to-slate-800' },
+            ...(isSuperAdmin
+              ? [{ label: 'Pending review', value: stats.pending, accent: 'from-amber-500 to-orange-600' }]
+              : []),
             { label: 'Live',       value: stats.published, accent: 'from-emerald-500 to-emerald-600' },
             { label: 'Drafts',     value: stats.draft,     accent: 'from-amber-500 to-amber-600' },
             { label: 'Off market', value: stats.offMarket, accent: 'from-slate-500 to-slate-600' },
@@ -413,9 +517,56 @@ export function AdminListingsPage() {
           </div>
         ) : listings.length > 0 ? (
           <>
+            {/* Search + Agent filter row */}
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+              {/* Search */}
+              <div className="relative flex-1">
+                <svg className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="search"
+                  placeholder="Search by headline, address, suburb…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
+                />
+              </div>
+
+              {/* Agent filter — super admin only */}
+              {isSuperAdmin && agentOptions.length > 0 && (
+                <div className="relative sm:w-60">
+                  <svg className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <select
+                    value={agentFilter}
+                    onChange={(e) => setAgentFilter(e.target.value)}
+                    className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-8 text-sm text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
+                  >
+                    <option value="all">All agents</option>
+                    <option value="mine">My listings</option>
+                    <optgroup label="────────">
+                      {agentOptions.map((a) => (
+                        <option key={a.id} value={a.id}>{a.name}</option>
+                      ))}
+                    </optgroup>
+                  </select>
+                  <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              )}
+            </div>
+
             <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-lg font-semibold text-slate-900">
-                {isSuperAdmin ? 'All properties' : 'My listings'}
+                {isSuperAdmin
+                  ? agentFilter === 'mine' ? 'My listings'
+                    : agentFilter !== 'all' ? `${agentOptions.find(a => a.id === agentFilter)?.name ?? ''}'s listings`
+                    : 'All properties'
+                  : 'My listings'}
+                <span className="ml-2 text-sm font-normal text-slate-400">{filteredListings.length}</span>
               </h2>
               <div className="flex flex-wrap gap-2">
                 {filterTabs.map((tab) => (

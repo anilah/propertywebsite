@@ -36,7 +36,7 @@ npm run build
 # 2. Deploy with Serverless Framework
 echo ""
 echo "▶ Deploying to AWS Lambda via Serverless Framework…"
-npx serverless deploy --stage "$STAGE" --verbose
+serverless deploy --stage "$STAGE" --verbose
 
 echo ""
 echo "✅  Backend deployed."

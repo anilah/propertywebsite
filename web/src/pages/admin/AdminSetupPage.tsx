@@ -40,14 +40,15 @@ export function AdminSetupPage() {
   const formatMobileNumber = (value: string) => {
     const digits = value.replace(/\D/g, '');
     const normalized = normalizeNzMobile(digits);
+    // Allow 10–11 domestic digits (standard + extended NZ mobiles)
     if (normalized.startsWith('0')) {
-      return normalized.slice(0, 10);
+      return normalized.slice(0, 11);
     }
     if (digits.startsWith('64')) {
-      const rest = digits.slice(2, 11);
+      const rest = digits.slice(2, 12);
       return rest.length ? `0${rest}` : digits.slice(0, 3);
     }
-    return digits.slice(0, 10);
+    return digits.slice(0, 11);
   };
 
   const handleSubmit = async () => {
@@ -56,7 +57,7 @@ export function AdminSetupPage() {
     try {
       const cleaned = normalizeNzMobile(mobile);
       if (!isValidNzMobile(cleaned)) {
-        setError('Enter a valid NZ mobile (e.g. 021 123 4567)');
+        setError('Enter a valid NZ mobile (10–11 digits, e.g. 021 123 4567 or 021 021 88860)');
         setLoading(false);
         return;
       }

@@ -1,11 +1,15 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useApiListingsStore } from "../../store/apiListingsStore";
 import { locationHierarchy } from "../../data/mockListings";
 import { FilterState, PropertyType } from "../../types";
 import { searchPath } from "../../utils/listingRoutes";
 import { Select } from "../ui/Select";
 import { Input } from "../ui/Input";
+import { useSiteConfig } from "../../context/SiteConfigContext";
+import { useHasFlatmateListings } from "../../hooks/useHasFlatmateListings";
+
+const FALLBACK_HERO = "https://www.trademe.co.nz/images/frend/property/landingpage/resi4sale-xl-1920.jpg";
 
 interface FilterBarProps {
   compact?: boolean;
@@ -13,7 +17,9 @@ interface FilterBarProps {
 
 export function FilterBar({ compact = false }: FilterBarProps) {
   const navigate = useNavigate();
+  const { config } = useSiteConfig();
   const { filters, setFilters } = useApiListingsStore();
+  const showFlatmates = useHasFlatmateListings() === true;
   const [localFilters, setLocalFilters] = useState<FilterState>(filters);
   const [searchNearby, setSearchNearby] = useState(false);
   const [openHomesOnly, setOpenHomesOnly] = useState(false);
@@ -106,15 +112,31 @@ export function FilterBar({ compact = false }: FilterBarProps) {
   ];
 
   const location = useLocation();
-  const isResultsPage = location.pathname === "/results" || /^\/property\/residential\/(sale|rent)\/search\/?$/.test(location.pathname);
-  const activeTab = filters.listingType === "RENT" ? "for-rent" : "for-sale";
+  const isResultsPage =
+    location.pathname === "/results" ||
+    /^\/property\/residential\/(sale|rent|flatmates)\/search\/?$/.test(location.pathname);
+  const isTradiesPage = location.pathname.startsWith("/tradies");
+  const activeTab = isTradiesPage
+    ? "tradies"
+    : filters.listingType === "FLATMATES"
+      ? "for-flatmates"
+      : filters.listingType === "RENT"
+        ? "for-rent"
+        : "for-sale";
 
   const handleTabChange = (tabId: string) => {
-    const newListingType = tabId === "for-rent" ? "RENT" : "SALE";
-    // Clear price filters — sale uses absolute $, rent uses weekly $, not interchangeable.
+    const newListingType =
+      tabId === "for-flatmates" ? "FLATMATES" : tabId === "for-rent" ? "RENT" : "SALE";
     setFilters({ listingType: newListingType, minPrice: undefined, maxPrice: undefined });
-    setLocalFilters((prev) => ({ ...prev, listingType: newListingType, minPrice: undefined, maxPrice: undefined }));
-    navigate(newListingType === "SALE" ? "/sale" : "/rent");
+    setLocalFilters((prev) => ({
+      ...prev,
+      listingType: newListingType,
+      minPrice: undefined,
+      maxPrice: undefined,
+    }));
+    navigate(
+      newListingType === "SALE" ? "/sale" : newListingType === "RENT" ? "/rent" : "/flatmates"
+    );
   };
 
   const showHero = !compact && !isResultsPage;
@@ -127,19 +149,23 @@ export function FilterBar({ compact = false }: FilterBarProps) {
           {/* Photo */}
           <div className="w-full h-40 sm:h-44 lg:h-48 overflow-hidden">
             <img
-              src="https://www.trademe.co.nz/images/frend/property/landingpage/resi4sale-xl-1920.jpg"
+              src={config.heroImageUrl || FALLBACK_HERO}
               alt="New Zealand properties"
               className="w-full h-full object-cover"
+              style={{ objectPosition: config.heroImagePosition || '50% 50%' }}
             />
           </div>
 
-          {/* Tab strip — absolutely positioned over the bottom edge of the image */}
-          <div className="absolute bottom-0 left-0 right-0 z-10 border-b border-gray-200">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex">
+          {/* Tab strip — full width, anchored to bottom of image, no white filler after tabs */}
+          <div className="absolute bottom-0 left-0 right-0 z-10">
+            <div
+              className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex overflow-x-auto"
+              style={{ scrollbarWidth: "none" }}
+            >
               <button
                 onClick={() => handleTabChange("for-sale")}
                 aria-pressed={activeTab === "for-sale"}
-                className={`flex items-center gap-2 px-5 sm:px-6 py-2.5 text-sm font-semibold transition-colors border-r border-gray-200 ${
+                className={`flex shrink-0 items-center gap-2 px-4 sm:px-6 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors border-r border-gray-200 ${
                   activeTab === "for-sale"
                     ? "bg-primary-600 text-white"
                     : "bg-white text-gray-600 hover:bg-gray-50"
@@ -154,7 +180,7 @@ export function FilterBar({ compact = false }: FilterBarProps) {
               <button
                 onClick={() => handleTabChange("for-rent")}
                 aria-pressed={activeTab === "for-rent"}
-                className={`flex items-center gap-2 px-5 sm:px-6 py-2.5 text-sm font-semibold transition-colors border-r border-gray-200 ${
+                className={`flex shrink-0 items-center gap-2 px-4 sm:px-6 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors border-r border-gray-200 ${
                   activeTab === "for-rent"
                     ? "bg-primary-600 text-white"
                     : "bg-white text-gray-600 hover:bg-gray-50"
@@ -166,20 +192,54 @@ export function FilterBar({ compact = false }: FilterBarProps) {
                 </svg>
                 <span>For rent</span>
               </button>
-              {/* Extend white background across remaining tab bar width */}
-              <div className="flex-1 bg-white border-l-0" />
+              {showFlatmates && (
+                <button
+                  onClick={() => handleTabChange("for-flatmates")}
+                  aria-pressed={activeTab === "for-flatmates"}
+                  className={`flex shrink-0 items-center gap-2 px-4 sm:px-6 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors border-r border-gray-200 ${
+                    activeTab === "for-flatmates"
+                      ? "bg-primary-600 text-white"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m5-3.13a4 4 0 100-8 4 4 0 000 8zm6 0a4 4 0 100-8 4 4 0 000 8z" />
+                  </svg>
+                  <span>Flatmates wanted</span>
+                </button>
+              )}
+              <Link
+                to="/tradies"
+                aria-current={activeTab === "tradies" ? "page" : undefined}
+                className={`flex shrink-0 items-center gap-2 px-4 sm:px-6 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors border-r border-gray-200 ${
+                  activeTab === "tradies"
+                    ? "bg-primary-600 text-white"
+                    : "bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
+                </svg>
+                <span>Find a tradie</span>
+              </Link>
+              {/* transparent spacer — lets the image show through to the right of the tabs */}
             </div>
           </div>
         </div>
       )}
 
-      {/* Heading + Search form */}
+      {/* Property search form — omitted on /tradies (TradiesPage owns matching white search) */}
+      {!isTradiesPage && (
       <div className={`w-full bg-white ${showHero ? "pt-5 pb-4" : "py-6"}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {showHero && (
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">
-            Search New Zealand's largest range of houses and properties for{" "}
-            {filters.listingType === "SALE" ? "sale" : "rent"}
+            {filters.listingType === "FLATMATES"
+              ? "Find flatmates and rooms to share across New Zealand"
+              : <>Search New Zealand's largest range of houses and properties for{" "}
+                {filters.listingType === "SALE" ? "sale" : "rent"}</>}
           </h1>
         )}
         <div className="bg-white rounded border border-gray-200 p-4 sm:p-5 relative z-10">
@@ -442,6 +502,7 @@ export function FilterBar({ compact = false }: FilterBarProps) {
         </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

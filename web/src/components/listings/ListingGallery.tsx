@@ -1,5 +1,6 @@
 import { useState, useMemo, type ReactNode } from "react";
 import { Listing } from "../../types";
+import { isVideoMediaKind, isVideoUrl } from "../../utils/listingImages";
 
 interface ListingGalleryProps {
   listing: Listing;
@@ -8,26 +9,21 @@ interface ListingGalleryProps {
   overlay?: ReactNode;
 }
 
-const kindLabel: Record<string, string> = {
-  PHOTO: "",
-  EXTERIOR: "Ext",
-  INTERIOR: "Int",
-  FLOORPLAN: "Plan",
-  AERIAL: "Aerial",
-  OTHER: "Other",
-};
-
 export function ListingGallery({ listing, variant = "default", overlay }: ListingGalleryProps) {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const items = useMemo(() => {
     if (listing.media && listing.media.length > 0) {
-      return listing.media.map((m) => ({
-        url: m.url,
-        kind: m.kind || "PHOTO",
-      }));
+      return listing.media
+        .filter((m) => !isVideoMediaKind(m.kind) && m.url && !isVideoUrl(m.url))
+        .map((m) => ({
+          url: m.url,
+          kind: m.kind || "PHOTO",
+        }));
     }
-    return (listing.images || []).map((url) => ({ url, kind: "PHOTO" as const }));
+    return (listing.images || [])
+      .filter((url) => url && !isVideoUrl(url))
+      .map((url) => ({ url, kind: "PHOTO" as const }));
   }, [listing.media, listing.images]);
 
   if (items.length === 0) {
@@ -62,31 +58,33 @@ export function ListingGallery({ listing, variant = "default", overlay }: Listin
   };
 
   const current = items[selectedImageIndex];
-  const badge = kindLabel[current.kind] || "";
 
   return (
-    <div className={variant === "hero" ? "space-y-2" : "space-y-4"}>
+    <div className={variant === "hero" ? "space-y-0" : "space-y-4"}>
       <div
-        className={`relative bg-gradient-to-br from-gray-200 to-gray-300 overflow-hidden group ${
-          variant === "hero" ? "aspect-[21/10] rounded-t-2xl" : "aspect-[16/10] rounded-2xl"
+        className={`relative overflow-hidden group bg-slate-200 ${
+          variant === "hero" ? "aspect-[16/10] rounded-t-2xl" : "aspect-[16/10] rounded-2xl"
         }`}
       >
+        {/* Blurred fill — removes black pillarbox without stretching the photo */}
+        <img
+          src={current.url}
+          alt=""
+          aria-hidden
+          className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover blur-2xl opacity-70"
+        />
+        <div className="absolute inset-0 bg-slate-900/20" aria-hidden />
         <img
           src={current.url}
           alt={listing.headline}
-          className="w-full h-full object-cover"
+          className="relative z-[1] h-full w-full object-contain"
         />
-        {badge ? (
-          <span className="absolute top-3 left-3 text-xs font-semibold uppercase tracking-wide bg-black/70 text-white px-2 py-1 rounded">
-            {badge}
-          </span>
-        ) : null}
 
         {items.length > 1 && (
           <>
             <button
               onClick={goToPrevious}
-              className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-900 p-3 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none"
+              className="absolute left-4 top-1/2 z-10 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-900 p-3 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none"
               aria-label="Previous image"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -95,7 +93,7 @@ export function ListingGallery({ listing, variant = "default", overlay }: Listin
             </button>
             <button
               onClick={goToNext}
-              className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-900 p-3 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none"
+              className="absolute right-4 top-1/2 z-10 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-900 p-3 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none"
               aria-label="Next image"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -106,7 +104,7 @@ export function ListingGallery({ listing, variant = "default", overlay }: Listin
         )}
 
         {items.length > 1 && (
-          <div className="absolute bottom-4 left-4 bg-black/70 text-white text-sm font-medium px-3 py-1.5 rounded-full backdrop-blur-sm">
+          <div className="absolute bottom-4 left-4 z-10 bg-black/70 text-white text-sm font-medium px-3 py-1.5 rounded-full backdrop-blur-sm">
             {selectedImageIndex + 1} / {items.length}
           </div>
         )}
@@ -118,25 +116,26 @@ export function ListingGallery({ listing, variant = "default", overlay }: Listin
         <div
           className={
             variant === "hero"
-              ? "flex gap-1.5 overflow-x-auto bg-white border-x border-b border-gray-200 rounded-b-2xl p-2"
+              ? "flex gap-2 overflow-x-auto bg-white border-x border-b border-gray-200 rounded-b-2xl p-2.5"
               : "grid grid-cols-4 sm:grid-cols-6 gap-2"
           }
         >
           {items.map((item, index) => (
             <button
-              key={index}
+              key={`${item.url}-${index}`}
+              type="button"
               onClick={() => setSelectedImageIndex(index)}
-              className={`relative overflow-hidden border-2 transition-all ${
+              className={`relative shrink-0 overflow-hidden border-2 bg-slate-100 transition-all ${
                 variant === "hero"
-                  ? "w-14 h-10 sm:w-16 sm:h-11 rounded"
+                  ? "w-20 h-14 sm:w-24 sm:h-16 rounded-md"
                   : "aspect-video rounded-lg"
               } ${
                 selectedImageIndex === index
                   ? variant === "hero"
-                    ? "border-primary-500"
+                    ? "border-primary-500 ring-1 ring-primary-300"
                     : "border-primary-500 ring-2 ring-primary-200 ring-offset-2 scale-105"
                   : variant === "hero"
-                    ? "border-gray-200"
+                    ? "border-gray-200 hover:border-gray-300"
                     : "border-gray-200 hover:border-gray-300 hover:scale-105"
               }`}
             >
@@ -144,12 +143,8 @@ export function ListingGallery({ listing, variant = "default", overlay }: Listin
                 src={item.url}
                 alt={`${listing.headline} - ${index + 1}`}
                 className="w-full h-full object-cover"
+                loading="lazy"
               />
-              {kindLabel[item.kind] ? (
-                <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] font-medium py-0.5 text-center">
-                  {kindLabel[item.kind]}
-                </span>
-              ) : null}
             </button>
           ))}
         </div>

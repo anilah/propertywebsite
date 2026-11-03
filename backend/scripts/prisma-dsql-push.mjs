@@ -17,6 +17,11 @@ const prodEnv = resolve(root, '.env.production');
 if (existsSync(prodEnv)) {
   config({ path: prodEnv, override: true });
 }
+// Prod deploy override: .env.production.prod takes highest priority
+const prodProdEnv = resolve(root, '.env.production.prod');
+if (existsSync(prodProdEnv)) {
+  config({ path: prodProdEnv, override: true });
+}
 
 let host = process.env.AURORA_DSQL_HOST?.trim();
 const region =

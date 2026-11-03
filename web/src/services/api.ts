@@ -21,7 +21,10 @@ async function request<T>(
   authMode: RequestAuthMode = 'bearer'
 ): Promise<T> {
   const headers = new Headers(options.headers as HeadersInit);
-  if (!headers.has('Content-Type')) {
+  const method = (options.method || 'GET').toUpperCase();
+  const hasBody = options.body !== undefined && options.body !== null && options.body !== '';
+  // Avoid Content-Type on empty POSTs — some gateways mishandle bodyless JSON requests
+  if (hasBody && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
   if (authMode === 'bearer') {
@@ -31,10 +34,22 @@ async function request<T>(
     }
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  } catch (networkErr) {
+    const hint =
+      method === 'POST' && endpoint.includes('instagram')
+        ? ' Network/timeout while talking to Meta (Reels often need a second tap). Check Integrations → Meta shows Instagram @handle after Test, with instagram_content_publish on the token.'
+        : '';
+    throw new ApiError(
+      0,
+      `${networkErr instanceof Error ? networkErr.message : 'Network error'}.${hint}`
+    );
+  }
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
@@ -43,7 +58,9 @@ async function request<T>(
         ? body.error
         : typeof body?.message === 'string'
           ? body.message
-          : response.statusText || 'Request failed';
+          : response.status === 504 || response.status === 502
+            ? 'Server timed out while Meta was still processing the Reel. Tap Post to Instagram again in a few seconds.'
+            : response.statusText || 'Request failed';
     throw new ApiError(response.status, message);
   }
 
@@ -72,6 +89,23 @@ export const authApi = {
     }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ mobileNumber, pin }),
+    }, 'omit');
+  },
+
+  register: async (data: {
+    mobileNumber: string;
+    firstName: string;
+    lastName: string;
+    pin: string;
+    email?: string;
+    agencyName?: string;
+    licenseNumber?: string;
+    officePhone?: string;
+    whatsappNumber?: string;
+  }) => {
+    return request<{ success: boolean; message: string }>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
     }, 'omit');
   },
 
@@ -175,7 +209,7 @@ export interface UploadConfig {
   localEnabled: boolean;
 }
 
-export type UploadFolder = 'profiles' | 'listings' | 'uploads';
+export type UploadFolder = 'profiles' | 'listings' | 'tradies' | 'uploads';
 
 export const uploadApi = {
   /** Returns upload capabilities: s3Enabled + localEnabled */
@@ -317,10 +351,13 @@ export interface AgentUser {
   lastName?: string | null;
   email?: string | null;
   agencyName?: string | null;
+  agencyLogoUrl?: string | null;
+  agencyBrandColor?: string | null;
   licenseNumber?: string | null;
   profilePhotoUrl?: string | null;
   officeBranchName?: string | null;
   officePhone?: string | null;
+  whatsappNumber?: string | null;
   officeWebsite?: string | null;
   appraisalUrl?: string | null;
   platinumPartner?: boolean;
@@ -401,6 +438,7 @@ export const agentsApi = {
     profilePhotoUrl?: string;
     officeBranchName?: string;
     officePhone?: string;
+    whatsappNumber?: string;
     officeWebsite?: string;
     appraisalUrl?: string;
     platinumPartner?: boolean;
@@ -416,6 +454,8 @@ export const agentsApi = {
     request(`/admin/agents/${id}/activate`, { method: 'PATCH' }),
   deactivateAgent: async (id: string): Promise<{ success: boolean; user: { id: string; mobileNumber: string; role: string; isActive: boolean } }> =>
     request(`/admin/agents/${id}/deactivate`, { method: 'PATCH' }),
+  deleteAgent: async (id: string): Promise<{ success: boolean }> =>
+    request(`/admin/agents/${id}`, { method: 'DELETE' }),
   updateAgent: async (
     id: string,
     payload: {
@@ -424,10 +464,13 @@ export const agentsApi = {
       lastName?: string;
       email?: string | null;
       agencyName?: string | null;
+      agencyLogoUrl?: string | null;
+      agencyBrandColor?: string | null;
       licenseNumber?: string | null;
       profilePhotoUrl?: string | null;
       officeBranchName?: string | null;
       officePhone?: string | null;
+      whatsappNumber?: string | null;
       officeWebsite?: string | null;
       appraisalUrl?: string | null;
       platinumPartner?: boolean;
@@ -458,6 +501,42 @@ export type PendingApprovalListing = Listing & {
   agentMobile?: string;
 };
 
+/** Admin: fetch all listings (super admin) — used by campaign wizard */
+export const adminListingsApi = {
+  getAll: async (params?: { page?: number; pageSize?: number; status?: string }) => {
+    const p = new URLSearchParams();
+    if (params?.page)     p.set('page',     String(params.page));
+    if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+    if (params?.status)   p.set('status',   params.status);
+    return request<{ listings: Listing[]; total: number }>(`/admin/listings?${p.toString()}`);
+  },
+};
+
+// ── Listing marketing media (photos, videos, reels for campaigns) ─────────────
+
+export interface ListingMarketingItem {
+  id: string;
+  listingId: string;
+  url: string;
+  kind: string;      // REEL | FLYER | CAROUSEL | VIDEO (legacy)
+  caption: string | null;
+  sortOrder: number;
+}
+
+export const listingMarketingApi = {
+  list: (listingId: string) =>
+    request<{ media: ListingMarketingItem[] }>(`/listings/${listingId}/marketing`),
+
+  add: (listingId: string, data: { url: string; kind: string; caption?: string; sortOrder?: number }) =>
+    request<{ media: ListingMarketingItem }>(`/listings/${listingId}/marketing`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  remove: (listingId: string, mediaId: string) =>
+    request<{ success: boolean }>(`/listings/${listingId}/marketing/${mediaId}`, { method: 'DELETE' }),
+};
+
 export const listingsApi = {
   /** Agent's own listings (requires auth) */
   getMyListings: async (): Promise<{ listings: Listing[] }> => {
@@ -465,8 +544,8 @@ export const listingsApi = {
   },
 
   /** Super admin — listings waiting to go live */
-  getPendingApprovalListings: async (): Promise<{ listings: PendingApprovalListing[] }> =>
-    request<{ listings: PendingApprovalListing[] }>('/listings/pending-approval'),
+  getPendingApprovalListings: async (): Promise<{ listings: PendingApprovalListing[]; total: number }> =>
+    request<{ listings: PendingApprovalListing[]; total: number }>('/listings/pending-approval'),
 
   approveListingPublish: async (id: string): Promise<Listing> =>
     request<Listing>(`/listings/${id}/approve-publish`, { method: 'POST' }),
@@ -502,6 +581,20 @@ export const listingsApi = {
     return request<Listing>(`/listings/${id}`);
   },
 
+  /** Public — more listings from the same agent / agency (ad-link “You can see more”) */
+  getMoreFromAgentOrAgency: async (
+    listingId: string,
+    limit = 8
+  ): Promise<{
+    listings: Listing[];
+    total: number;
+    scope: 'agent' | 'agency' | 'agent_and_agency' | 'none';
+    agentName: string | null;
+    agencyName: string | null;
+  }> => {
+    return request(`/listings/${listingId}/more-from?limit=${limit}`);
+  },
+
   createListing: async (listing: Omit<Listing, 'id' | 'listedDate' | 'updatedDate'>): Promise<Listing> => {
     return request<Listing>('/listings', {
       method: 'POST',
@@ -525,12 +618,86 @@ export const listingsApi = {
   /** Public — persist buyer enquiry */
   submitEnquiry: async (
     listingId: string,
-    payload: { name: string; email: string; phone?: string; message: string }
+    payload: {
+      name: string;
+      email: string;
+      phone?: string;
+      message: string;
+      attribution?: EnquiryAttribution;
+    }
   ): Promise<{ success: boolean }> => {
     return request<{ success: boolean }>(`/listings/${listingId}/enquiries`, {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+};
+
+/** Where an enquirer clicked through from (tracked post links: ?utm_source=…&utm_campaign=…) */
+export interface EnquiryAttribution {
+  source?: string;
+  medium?: string;
+  campaign?: string;
+  referrer?: string;
+}
+
+export type EnquirySourceFilter =
+  | 'facebook' | 'instagram' | 'tiktok' | 'whatsapp' | 'google' | 'email' | 'other' | 'direct';
+
+/** Listing form enquiries (Admin → Leads) */
+export interface ListingEnquiry {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  message: string;
+  createdAt: string;
+  source?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
+  referrer?: string | null;
+  campaign?: { id: string; title: string | null } | null;
+  emailAudit?: {
+    smtpConfigured: boolean;
+    from: string;
+    completedAt: string;
+    attempts: Array<{
+      role: 'agent' | 'admin' | 'buyer';
+      to: string[];
+      status: 'sent' | 'failed' | 'skipped';
+      error?: string;
+      messageId?: string;
+      at: string;
+    }>;
+  } | null;
+  listing: {
+    id: string;
+    headline: string;
+    listingType: string;
+    address: string;
+    status: string;
+    agent: { id: string; name: string | null; email: string | null } | null;
+  } | null;
+}
+
+export const enquiryApi = {
+  list: (params?: {
+    page?: number;
+    pageSize?: number;
+    q?: string;
+    source?: EnquirySourceFilter | '';
+    campaignId?: string;
+  }) => {
+    const sp = new URLSearchParams();
+    if (params?.page) sp.set('page', String(params.page));
+    if (params?.pageSize) sp.set('pageSize', String(params.pageSize));
+    if (params?.q) sp.set('q', params.q);
+    if (params?.source) sp.set('source', params.source);
+    if (params?.campaignId) sp.set('campaignId', params.campaignId);
+    const qs = sp.toString();
+    return request<{ enquiries: ListingEnquiry[]; total: number; page: number; pageSize: number }>(
+      `/admin/enquiries${qs ? `?${qs}` : ''}`
+    );
   },
 };
 
@@ -580,4 +747,479 @@ export const parcelInfoApi = {
       { method: 'GET' },
       'omit'
     ),
+};
+
+// ── School zones (NZ Ministry of Education, via ArcGIS) ───────────────────────
+export type SchoolAdapterStatus = 'ok' | 'no_data' | 'error';
+
+export interface SchoolAdapterResult<T> {
+  status: SchoolAdapterStatus;
+  data: T | null;
+  source: string;
+  message?: string;
+  fetchedAt: string;
+}
+
+export interface SchoolInfo {
+  id: number;
+  name: string;
+  address?: string;
+  type?: string;
+  roll?: number;
+  equityIndex?: number;
+  phone?: string;
+  website?: string;
+  hasEnrolmentScheme?: boolean;
+}
+
+export interface NearbySchool extends SchoolInfo {
+  distanceKm: number;
+}
+
+export interface InZoneSchool extends SchoolInfo {
+  effectiveDate?: string;
+}
+
+export interface SchoolZonesResponse {
+  lat: number;
+  lng: number;
+  inZone: SchoolAdapterResult<InZoneSchool[]>;
+  nearby: SchoolAdapterResult<NearbySchool[]>;
+  cachedAt?: string;
+}
+
+export const schoolZonesApi = {
+  get: async (lat: number, lng: number): Promise<SchoolZonesResponse> =>
+    request<SchoolZonesResponse>(
+      `/school-zones?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`,
+      { method: 'GET' },
+      'omit'
+    ),
+};
+
+// ── Address geocoding (admin listing form — find coordinates from an address) ─
+export type GeocodeStatus = 'ok' | 'not_found' | 'error';
+
+export interface GeocodeCandidate {
+  lat: number;
+  lng: number;
+  label: string;
+}
+
+export interface GeocodeResult {
+  status: GeocodeStatus;
+  candidates: GeocodeCandidate[];
+  message?: string;
+}
+
+export const geocodeApi = {
+  search: async (query: string): Promise<GeocodeResult> =>
+    request<GeocodeResult>(`/admin/geocode?q=${encodeURIComponent(query)}`, { method: 'GET' }),
+};
+
+// ── Site branding config ───────────────────────────────────────────────────────
+
+export interface SiteConfigResponse {
+  siteName:     string;
+  tagline:      string;
+  primaryColor: string;
+  logoUrl:      string | null;
+  faviconUrl:   string | null;
+}
+
+export const siteConfigApi = {
+  get: async (): Promise<SiteConfigResponse> =>
+    request<SiteConfigResponse>('/config/site', { method: 'GET' }, 'omit'),
+};
+
+// ── Digital Marketing Campaigns (Sprint 3) ────────────────────────────────────
+
+export type CampaignPlatform = 'META' | 'GOOGLE' | 'TIKTOK';
+export type CampaignStatus   = 'DRAFT' | 'SCHEDULED' | 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED';
+export type LeadStatus       = 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'CONVERTED' | 'LOST';
+
+export interface CampaignAsset {
+  id:           string;
+  campaignId:   string;
+  assetType:    'IMAGE' | 'VIDEO' | 'LOGO' | 'COVER';
+  url:          string;
+  thumbnailUrl: string | null;
+  format:       string | null;
+  width:        number | null;
+  height:       number | null;
+  durationSec:  number | null;
+  fileSize:     number | null;
+  mimeType:     string | null;
+  sortOrder:    number;
+  createdAt:    string;
+}
+
+export interface CampaignLead {
+  id:          string;
+  campaignId:  string;
+  platform:    CampaignPlatform | 'MANUAL';
+  listingId:   string | null;
+  leadFormId:  string | null;
+  fullName:    string | null;
+  email:       string | null;
+  phone:       string | null;
+  message:     string | null;
+  extraFields: Record<string, string> | null;
+  status:      LeadStatus;
+  notes:       string | null;
+  createdAt:   string;
+  updatedAt:   string;
+  campaign?:   { id: string; title: string; platform: CampaignPlatform };
+}
+
+export interface Campaign {
+  id:                 string;
+  title:              string;
+  platform:           CampaignPlatform;
+  campaignType:       string;
+  campaignSubtype:    string | null;
+  status:             CampaignStatus;
+  objective:          string | null;
+  budgetType:         'DAILY' | 'LIFETIME';
+  budgetAmount:       number | null;
+  currency:           string;
+  startDate:          string | null;
+  endDate:            string | null;
+  targetAudience:     TargetAudience | null;
+  platformConfig:     Record<string, unknown> | null;
+  externalCampaignId: string | null;
+  externalAdSetId:    string | null;
+  externalAdId:       string | null;
+  listingIds:         string[];
+  headline:           string | null;
+  primaryText:        string | null;
+  description:        string | null;
+  callToAction:       string | null;
+  destinationUrl:     string | null;
+  leadFormConfig:     LeadFormConfig | null;
+  notes:              string | null;
+  createdBy:          string | null;
+  createdAt:          string;
+  updatedAt:          string;
+  assets:             CampaignAsset[];
+  leadCount:          number;
+  leads?:             CampaignLead[];
+}
+
+export interface TargetAudience {
+  ageMin?:       number;
+  ageMax?:       number;
+  genders?:      string[];
+  locations?:    string[];
+  interests?:    string[];
+  languages?:    string[];
+  ageGroups?:    string[];  // TikTok format
+  geoLocations?: { countries?: string[] };
+}
+
+export interface LeadFormConfig {
+  fields:           { key: string; label: string; required: boolean }[];
+  thankYouMessage?: string;
+  privacyPolicyUrl?: string;
+}
+
+export interface CampaignsResponse {
+  campaigns: Campaign[];
+  total:     number;
+  page:      number;
+  pageSize:  number;
+}
+
+export interface LeadsResponse {
+  leads:    CampaignLead[];
+  total:    number;
+  page:     number;
+  pageSize: number;
+}
+
+export const campaignApi = {
+  list: (params?: { platform?: string; status?: string; page?: number; pageSize?: number }) => {
+    const p = new URLSearchParams();
+    if (params?.platform) p.set('platform', params.platform);
+    if (params?.status)   p.set('status',   params.status);
+    if (params?.page)     p.set('page',     String(params.page));
+    if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+    return request<CampaignsResponse>(`/admin/campaigns?${p.toString()}`);
+  },
+
+  get: (id: string) => request<Campaign>(`/admin/campaigns/${id}`),
+
+  create: (data: Partial<Campaign>) =>
+    request<Campaign>('/admin/campaigns', { method: 'POST', body: JSON.stringify(data) }),
+
+  update: (id: string, data: Partial<Campaign>) =>
+    request<Campaign>(`/admin/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  delete: (id: string) =>
+    request<{ success: boolean }>(`/admin/campaigns/${id}`, { method: 'DELETE' }),
+
+  publish: (id: string) =>
+    request<{
+      success: boolean;
+      message: string;
+      campaign: Campaign;
+      publish?: {
+        mode: 'ORGANIC' | 'PAID';
+        platform: string;
+        status: string;
+        postId: string | null;
+        campaignId: string | null;
+        viewUrl: string | null;
+        publishedAt: string;
+        instagram?: {
+          status?: string;
+          mediaId?: string;
+          containerId?: string;
+          username?: string;
+          viewUrl?: string;
+          error?: string;
+        };
+      };
+    }>(`/admin/campaigns/${id}/publish`, { method: 'POST' }),
+
+  finalizeInstagram: (id: string, opts?: { force?: boolean }) =>
+    request<{
+      success: boolean;
+      message: string;
+      campaign: Campaign;
+      instagram?: {
+        status?: string;
+        mediaId?: string;
+        username?: string;
+        viewUrl?: string;
+        error?: string;
+      };
+      linkedInstagram?: { id?: string; username?: string };
+    }>(`/admin/campaigns/${id}/finalize-instagram`, {
+      method: 'POST',
+      body: JSON.stringify({ force: Boolean(opts?.force) }),
+    }),
+
+  addAsset: (campaignId: string, asset: Partial<CampaignAsset>) =>
+    request<CampaignAsset>(`/admin/campaigns/${campaignId}/assets`, {
+      method: 'POST',
+      body: JSON.stringify(asset),
+    }),
+
+  deleteAsset: (campaignId: string, assetId: string) =>
+    request<{ success: boolean }>(`/admin/campaigns/${campaignId}/assets/${assetId}`, {
+      method: 'DELETE',
+    }),
+
+  getLeads: (campaignId: string, params?: { page?: number; status?: string }) => {
+    const p = new URLSearchParams();
+    if (params?.page)   p.set('page',   String(params.page));
+    if (params?.status) p.set('status', params.status);
+    return request<LeadsResponse>(`/admin/campaigns/${campaignId}/leads?${p.toString()}`);
+  },
+
+  syncLeads: (campaignId: string) =>
+    request<{ success: boolean; synced: number }>(`/admin/campaigns/${campaignId}/sync-leads`, {
+      method: 'POST',
+    }),
+
+  updateLead: (leadId: string, data: { status?: LeadStatus; notes?: string }) =>
+    request<CampaignLead>(`/admin/campaigns/leads/${leadId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+};
+
+// ── Integrations ─────────────────────────────────────────────────────────────
+
+export interface PlatformIntegration {
+  platform:     'META' | 'GOOGLE' | 'TIKTOK';
+  isActive:     boolean;
+  lastTestedAt: string | null;
+  lastTestOk:   boolean | null;
+  lastTestMsg:  string | null;
+  config:       Record<string, string>;
+}
+
+export const integrationsApi = {
+  list: () => request<PlatformIntegration[]>('/admin/integrations'),
+};
+
+// ── Content (News + Guides) ───────────────────────────────────────────────────
+
+/** Legacy formats (read-only, for backward-compat rendering of seeded content) */
+export type NewsBody = { paragraphs: string[] };
+export type GuideSection = { heading: string; body: string[] };
+export type GuideBody = { sections: GuideSection[] };
+/** Current rich-text format */
+export type RichBody = { html: string };
+
+export interface ContentPost {
+  id: string;
+  slug: string;
+  type: 'news' | 'guide';
+  title: string;
+  excerpt: string;
+  body: RichBody | NewsBody | GuideBody;
+  imageUrl: string | null;
+  category: string | null;
+  featured: boolean;
+  published: boolean;
+  readTime: string | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt?: string;
+  createdBy?: string | null;
+}
+
+export type ContentPostSummary = Omit<ContentPost, 'body' | 'updatedAt' | 'createdBy'>;
+
+export const contentApi = {
+  // Public
+  listPosts: (params: { type?: string; category?: string; featured?: boolean; limit?: number; page?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.type) q.set('type', params.type);
+    if (params.category) q.set('category', params.category);
+    if (params.featured !== undefined) q.set('featured', String(params.featured));
+    if (params.limit) q.set('limit', String(params.limit));
+    if (params.page) q.set('page', String(params.page));
+    return request<{ posts: ContentPostSummary[]; total: number; page: number; limit: number }>(
+      `/content/posts?${q.toString()}`, {}, 'omit'
+    );
+  },
+
+  getPost: (slug: string) =>
+    request<{ post: ContentPost }>(`/content/posts/${slug}`, {}, 'omit'),
+
+  // Admin
+  adminListPosts: (params: { type?: string; page?: number; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.type) q.set('type', params.type);
+    if (params.page) q.set('page', String(params.page));
+    if (params.limit) q.set('limit', String(params.limit));
+    return request<{ posts: ContentPost[]; total: number }>(`/content/admin?${q.toString()}`);
+  },
+
+  adminGetPost: (id: string) =>
+    request<{ post: ContentPost }>(`/content/admin/${id}`),
+
+  adminCreatePost: (data: Partial<ContentPost> & { type: string; title: string; excerpt: string; body: RichBody | NewsBody | GuideBody }) =>
+    request<{ post: ContentPost }>('/content/admin', { method: 'POST', body: JSON.stringify(data) }),
+
+  adminUpdatePost: (id: string, data: Partial<ContentPost>) =>
+    request<{ post: ContentPost }>(`/content/admin/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  adminDeletePost: (id: string) =>
+    request<{ success: boolean }>(`/content/admin/${id}`, { method: 'DELETE' }),
+};
+
+// ── Tradie directory ──────────────────────────────────────────────────────────
+
+export interface Tradie {
+  id: string;
+  slug: string;
+  businessName: string;
+  contactName: string | null;
+  categories: string[];
+  skills: string[];
+  description: string | null;
+  tagline: string | null;
+  yearsExperience: number | null;
+  insuranceInfo: string | null;
+  /** Work / project gallery URLs (like listing photos) */
+  workImages: string[];
+  /** Admin-only — omitted from public API (Enquire flow instead). */
+  phone?: string;
+  whatsappNumber?: string | null;
+  email?: string | null;
+  website: string | null;
+  photoUrl: string | null;
+  licenseNumber: string | null;
+  region: string | null;
+  district: string | null;
+  suburbs: string[];
+  featured: boolean;
+}
+
+export interface AdminTradie extends Tradie {
+  phone: string;
+  whatsappNumber: string | null;
+  email: string | null;
+  isActive: boolean;
+  callClicks: number;
+  whatsappClicks: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type TradieInput = Omit<Tradie, 'id' | 'slug' | 'phone' | 'whatsappNumber' | 'email'> & {
+  phone: string;
+  whatsappNumber: string | null;
+  email: string | null;
+  isActive: boolean;
+};
+
+export interface TradieSearchParams {
+  q?: string;
+  category?: string;
+  region?: string;
+  district?: string;
+  suburb?: string;
+  /** When true, only featured tradies (default browse). */
+  featured?: boolean;
+  page?: number;
+  limit?: number;
+}
+
+export const tradiesApi = {
+  // Public
+  list: (params: TradieSearchParams = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null && String(v).trim() !== '') q.set(k, String(v));
+    }
+    return request<{ tradies: Tradie[]; total: number; page: number; limit: number }>(
+      `/tradies?${q.toString()}`, {}, 'omit'
+    );
+  },
+
+  categories: () =>
+    request<{ categories: { name: string; count: number }[] }>('/tradies/categories', {}, 'omit'),
+
+  get: (slug: string) =>
+    request<{ tradie: Tradie }>(`/tradies/${encodeURIComponent(slug)}`, {}, 'omit'),
+
+  enquire: (
+    id: string,
+    body: { name: string; email: string; phone?: string; message: string; intent?: string }
+  ) =>
+    request<{ success: boolean; enquiryId: string }>(
+      `/tradies/${id}/enquire`,
+      { method: 'POST', body: JSON.stringify(body) },
+      'omit'
+    ),
+
+  recordContactClick: (id: string, channel: 'call' | 'whatsapp') =>
+    request<{ success: boolean }>(
+      `/tradies/${id}/contact-click`,
+      { method: 'POST', body: JSON.stringify({ channel }), keepalive: true },
+      'omit'
+    ),
+
+  // Admin (super admin)
+  adminList: (q?: string) =>
+    request<{ tradies: AdminTradie[]; total: number }>(
+      `/admin/tradies${q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`
+    ),
+
+  adminGet: (id: string) => request<{ tradie: AdminTradie }>(`/admin/tradies/${id}`),
+
+  adminCreate: (data: TradieInput) =>
+    request<{ tradie: AdminTradie }>('/admin/tradies', { method: 'POST', body: JSON.stringify(data) }),
+
+  adminUpdate: (id: string, data: Partial<TradieInput>) =>
+    request<{ tradie: AdminTradie }>(`/admin/tradies/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  adminDelete: (id: string) =>
+    request<{ success: boolean }>(`/admin/tradies/${id}`, { method: 'DELETE' }),
 };
